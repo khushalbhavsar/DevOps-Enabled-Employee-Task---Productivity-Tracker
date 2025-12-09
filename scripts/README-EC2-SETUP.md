@@ -71,6 +71,7 @@ chmod +x setup-all-in-one-ec2.sh
 | `setup-jenkins-ec2.sh` | Installs Jenkins, Docker, Maven, Git, Java 21 | ~5-10 min |
 | `setup-sonarqube-ec2.sh` | Installs SonarQube, PostgreSQL, Sonar Scanner | ~10-15 min |
 | `setup-monitoring-ec2.sh` | Installs Grafana, Prometheus, Node Exporter | ~5-10 min |
+| `stress-test-cpu.sh` | CPU stress test for monitoring alerts | N/A |
 ---
 
 ## All-in-One Installation
@@ -117,11 +118,11 @@ The all-in-one script installs:
    - Docker
    - Maven
    - Git
-   - Java 21
+   - Java 21 (Amazon Corretto)
 
 2. **SonarQube** (Port 9000)
    - PostgreSQL 15
-   - Java 17
+   - Java 17 (Amazon Corretto)
    - Sonar Scanner CLI
 
 3. **Monitoring Stack**
@@ -435,6 +436,24 @@ After 5 minutes of high CPU:
 ---
 
 ## Troubleshooting
+
+### Java Installation Issues (Amazon Linux 2023)
+
+If you encounter `Error: Unable to find a match: java-21-openjdk`, this is because Amazon Linux 2023 uses Amazon Corretto instead of OpenJDK:
+
+```bash
+# The scripts already use the correct packages:
+# For Jenkins (Java 21)
+sudo yum install java-21-amazon-corretto -y
+
+# For SonarQube (Java 17)
+sudo yum install java-17-amazon-corretto -y
+
+# Verify installation
+java --version
+```
+
+**Note:** The updated scripts automatically install the correct Java version (Amazon Corretto) for Amazon Linux 2023.
 
 ### Jenkins Won't Start
 

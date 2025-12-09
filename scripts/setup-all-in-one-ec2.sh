@@ -99,17 +99,16 @@ print_info "Configuring Git..."
 git config --global user.name "${GIT_USER_NAME}"
 git config --global user.email "${GIT_USER_EMAIL}"
 
-# Install Java 21 for Jenkins
+# Install Java 21 for Jenkins (Amazon Linux 2023 compatible)
 print_info "Installing Java 21 (Amazon Corretto)..."
-sudo yum install java-21-amazon-corretto.x86_64 -y
+sudo yum install java-21-amazon-corretto -y
 java --version
 
 # Install Jenkins
 print_info "Installing Jenkins..."
 sudo wget -O /etc/yum.repos.d/jenkins.repo https://pkg.jenkins.io/redhat-stable/jenkins.repo
 sudo rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key
-sudo yum upgrade -y
-sudo yum install fontconfig java-21-openjdk -y
+sudo yum install fontconfig -y
 sudo yum install jenkins -y
 sudo systemctl daemon-reload
 

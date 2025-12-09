@@ -61,9 +61,9 @@ sudo yum install maven -y
 mvn -v
 print_info "✅ Maven installed successfully"
 
-# Step 5: Install Java 21 (Amazon Corretto)
+# Step 5: Install Java 21 (Amazon Corretto) - Compatible with Amazon Linux 2023
 print_info "Step 5: Installing Java 21 (Amazon Corretto)..."
-sudo yum install java-21-amazon-corretto.x86_64 -y
+sudo yum install java-21-amazon-corretto -y
 java --version
 print_info "✅ Java 21 installed successfully"
 
@@ -72,8 +72,7 @@ print_info "Step 6: Installing Jenkins..."
 sudo wget -O /etc/yum.repos.d/jenkins.repo https://pkg.jenkins.io/redhat-stable/jenkins.repo
 sudo rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key
 
-sudo yum upgrade -y
-sudo yum install fontconfig java-21-openjdk -y
+sudo yum install fontconfig -y
 sudo yum install jenkins -y
 
 sudo systemctl daemon-reload
