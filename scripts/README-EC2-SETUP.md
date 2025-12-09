@@ -4,13 +4,43 @@ This directory contains automated setup scripts for configuring Jenkins, SonarQu
 
 ## 📋 Table of Contents
 
-1. [Prerequisites](#prerequisites)
-2. [Scripts Overview](#scripts-overview)
-3. [Jenkins Setup](#jenkins-setup)
-4. [SonarQube Setup](#sonarqube-setup)
-5. [Monitoring Stack Setup](#monitoring-stack-setup)
+1. [Quick Start](#quick-start)
+2. [Prerequisites](#prerequisites)
+3. [Scripts Overview](#scripts-overview)
+4. [All-in-One Installation](#all-in-one-installation)
+5. [Individual Component Setup](#individual-component-setup)
 6. [CPU Stress Test](#cpu-stress-test)
 7. [Security Best Practices](#security-best-practices)
+
+---
+
+## Quick Start
+
+### Interactive Installation Menu
+
+```bash
+# Clone repository
+git clone https://github.com/khushalbhavsar/DevOps-Enabled-Employee-Task---Productivity-Tracker.git
+cd DevOps-Enabled-Employee-Task---Productivity-Tracker/scripts/
+
+# Run interactive menu
+chmod +x quick-install.sh
+./quick-install.sh
+```
+
+The menu will guide you through:
+- All-in-One installation (all components on one EC2)
+- Individual component installations
+- CPU stress testing
+
+### One-Command All-in-One Installation
+
+```bash
+# Download and run all-in-one installer
+curl -o setup-all-in-one-ec2.sh https://raw.githubusercontent.com/khushalbhavsar/DevOps-Enabled-Employee-Task---Productivity-Tracker/main/scripts/setup-all-in-one-ec2.sh
+chmod +x setup-all-in-one-ec2.sh
+./setup-all-in-one-ec2.sh
+```
 
 ---
 
@@ -36,12 +66,105 @@ This directory contains automated setup scripts for configuring Jenkins, SonarQu
 
 | Script | Purpose | Time |
 |--------|---------|------|
+| `quick-install.sh` | **Interactive menu** for all installation options | N/A |
+| `setup-all-in-one-ec2.sh` | **All-in-One**: Jenkins + SonarQube + Monitoring | ~20-30 min |
 | `setup-jenkins-ec2.sh` | Installs Jenkins, Docker, Maven, Git, Java 21 | ~5-10 min |
 | `setup-sonarqube-ec2.sh` | Installs SonarQube, PostgreSQL, Sonar Scanner | ~10-15 min |
 | `setup-monitoring-ec2.sh` | Installs Grafana, Prometheus, Node Exporter | ~5-10 min |
-| `stress-test-cpu.sh` | CPU stress test for monitoring alerts | N/A |
+---
+
+## All-in-One Installation
+
+### Jenkins Setupverything on One EC2 Instance
+
+**Best for:** Development/Testing environments, POC, Learning
+
+**Instance Requirements:**
+- **Type:** t3.xlarge or larger
+- **RAM:** 16GB minimum
+- **vCPU:** 4+ cores
+- **Storage:** 50GB+ EBS
+- **Security Group Ports:** 22, 8080, 9000, 3000, 9090, 9100
+
+### Installation Steps
+
+```bash
+# 1. Connect to EC2
+ssh -i "your-key.pem" ec2-user@<EC2-PUBLIC-IP>
+
+# 2. Download the all-in-one script
+curl -O https://raw.githubusercontent.com/khushalbhavsar/DevOps-Enabled-Employee-Task---Productivity-Tracker/main/scripts/setup-all-in-one-ec2.sh
+
+# 3. Make executable
+chmod +x setup-all-in-one-ec2.sh
+
+# 4. Run with optional environment variables
+SONAR_DB_PASSWORD="SecurePass123!" \
+GRAFANA_ADMIN_PASSWORD="Admin@123" \
+GIT_USER_NAME="Your Name" \
+GIT_USER_EMAIL="your.email@example.com" \
+./setup-all-in-one-ec2.sh
+
+# Or run with defaults (for testing only)
+./setup-all-in-one-ec2.sh
+```
+
+### What Gets Installed
+
+The all-in-one script installs:
+
+1. **Jenkins** (Port 8080)
+   - Docker
+   - Maven
+   - Git
+   - Java 21
+
+2. **SonarQube** (Port 9000)
+   - PostgreSQL 15
+   - Java 17
+   - Sonar Scanner CLI
+
+3. **Monitoring Stack**
+   - Grafana (Port 3000)
+   - Prometheus (Port 9090)
+   - Node Exporter (Port 9100)
+   - Pre-configured alert rules
+
+### Post-Installation
+---
+
+### SonarQube Setup
+```
+════════════════════════════════════════════
+🎉 ALL-IN-ONE DEVOPS STACK COMPLETED!
+════════════════════════════════════════════
+
+🔧 Jenkins:      http://<IP>:8080
+🔍 SonarQube:    http://<IP>:9000
+📊 Grafana:      http://<IP>:3000
+📈 Prometheus:   http://<IP>:9090
+📉 Node Exporter: http://<IP>:9100/metrics
+```
+
+All passwords and initial credentials will be displayed.
+
+### Verify Installation
+
+```bash
+# Check all services
+sudo systemctl status jenkins sonarqube grafana-server prometheus node_exporter
+
+# View individual status
+sudo systemctl status jenkins
+sudo systemctl status sonarqube
+sudo systemctl status grafana-server
+sudo systemctl status prometheus
+sudo systemctl status node_exporter
+```
 
 ---
+
+## Individual Component Setup
 
 ## Jenkins Setup
 
@@ -57,7 +180,7 @@ ssh -i "jenkins.pem" ec2-user@<EC2-PUBLIC-IP>
 
 ```bash
 # Download script
-curl -O https://raw.githubusercontent.com/yourusername/yourrepo/main/scripts/setup-jenkins-ec2.sh
+curl -O https://raw.githubusercontent.com/khushalbhavsar/DevOps-Enabled-Employee-Task---Productivity-Tracker/main/scripts/setup-jenkins-ec2.sh
 
 # Make executable
 chmod +x setup-jenkins-ec2.sh
@@ -67,9 +190,9 @@ GIT_USER_NAME="Your Name" GIT_USER_EMAIL="your.email@example.com" ./setup-jenkin
 ```
 
 ### 3. Post-Installation
+---
 
-The script will display:
-- Jenkins initial admin password
+### Monitoring Stack Setupassword
 - Access URL: `http://<EC2-IP>:8080`
 
 **Next Steps:**
@@ -113,7 +236,7 @@ ssh -i "sonarqube.pem" ec2-user@<EC2-PUBLIC-IP>
 
 ```bash
 # Download script
-curl -O https://raw.githubusercontent.com/yourusername/yourrepo/main/scripts/setup-sonarqube-ec2.sh
+curl -O https://raw.githubusercontent.com/khushalbhavsar/DevOps-Enabled-Employee-Task---Productivity-Tracker/main/scripts/setup-sonarqube-ec2.sh
 
 # Make executable
 chmod +x setup-sonarqube-ec2.sh
@@ -172,7 +295,7 @@ ssh -i "monitoring.pem" ec2-user@<EC2-PUBLIC-IP>
 
 ```bash
 # Download script
-curl -O https://raw.githubusercontent.com/yourusername/yourrepo/main/scripts/setup-monitoring-ec2.sh
+curl -O https://raw.githubusercontent.com/khushalbhavsar/DevOps-Enabled-Employee-Task---Productivity-Tracker/main/scripts/setup-monitoring-ec2.sh
 
 # Make executable
 chmod +x setup-monitoring-ec2.sh
@@ -245,7 +368,7 @@ Test CPU monitoring alerts by artificially increasing CPU load.
 
 ```bash
 # Download script
-curl -O https://raw.githubusercontent.com/yourusername/yourrepo/main/scripts/stress-test-cpu.sh
+curl -O https://raw.githubusercontent.com/khushalbhavsar/DevOps-Enabled-Employee-Task---Productivity-Tracker/main/scripts/stress-test-cpu.sh
 
 # Make executable
 chmod +x stress-test-cpu.sh
