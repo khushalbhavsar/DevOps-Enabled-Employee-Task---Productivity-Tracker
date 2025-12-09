@@ -138,20 +138,44 @@ sudo yum install java-17-amazon-corretto.x86_64 -y
 # Install PostgreSQL 15
 print_info "Installing PostgreSQL 15..."
 sudo dnf install postgresql15.x86_64 postgresql15-server -y
-sudo postgresql-setup --initdb
+
+# Initialize PostgreSQL if not already initialized
+if [ ! -f /var/lib/pgsql/data/PG_VERSION ]; then
+    print_info "Initializing PostgreSQL database..."
+    sudo postgresql-setup --initdb
+else
+    print_info "PostgreSQL already initialized, skipping..."
+fi
+
 sudo systemctl start postgresql
 sudo systemctl enable postgresql
+
+# Wait for PostgreSQL to be ready
+print_info "Waiting for PostgreSQL to be ready..."
+sleep 5
 
 # Configure PostgreSQL
 print_info "Configuring PostgreSQL database..."
 echo "postgres:${SONAR_DB_PASSWORD}" | sudo chpasswd
 
-sudo -u postgres psql <<EOF
-CREATE USER sonar WITH ENCRYPTED PASSWORD '${SONAR_DB_PASSWORD}';
-CREATE DATABASE sonarqube OWNER sonar;
-GRANT ALL PRIVILEGES ON DATABASE sonarqube TO sonar;
-\q
-EOF
+# Check if sonar user and database already exist
+SONAR_USER_EXISTS=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='sonar'" 2>/dev/null || echo "0")
+SONAR_DB_EXISTS=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='sonarqube'" 2>/dev/null || echo "0")
+
+if [ "$SONAR_USER_EXISTS" != "1" ]; then
+    print_info "Creating SonarQube database user..."
+    sudo -u postgres psql -c "CREATE USER sonar WITH ENCRYPTED PASSWORD '${SONAR_DB_PASSWORD}';"
+else
+    print_info "SonarQube user already exists, skipping..."
+fi
+
+if [ "$SONAR_DB_EXISTS" != "1" ]; then
+    print_info "Creating SonarQube database..."
+    sudo -u postgres psql -c "CREATE DATABASE sonarqube OWNER sonar;"
+    sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE sonarqube TO sonar;"
+else
+    print_info "SonarQube database already exists, skipping..."
+fi
 
 # Download and install SonarQube
 print_info "Downloading SonarQube..."

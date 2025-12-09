@@ -54,10 +54,22 @@ print_info "✅ Java 17 installed successfully"
 # Step 3: Install PostgreSQL 15
 print_info "Step 3: Installing PostgreSQL 15..."
 sudo dnf install postgresql15.x86_64 postgresql15-server -y
-sudo postgresql-setup --initdb
+
+# Initialize PostgreSQL if not already initialized
+if [ ! -f /var/lib/pgsql/data/PG_VERSION ]; then
+    print_info "Initializing PostgreSQL database..."
+    sudo postgresql-setup --initdb
+else
+    print_info "PostgreSQL already initialized, skipping..."
+fi
+
 sudo systemctl start postgresql
 sudo systemctl enable postgresql
 print_info "✅ PostgreSQL 15 installed successfully"
+
+# Wait for PostgreSQL to be ready
+print_info "Waiting for PostgreSQL to be ready..."
+sleep 5
 
 # Step 4: Configure PostgreSQL for SonarQube
 print_info "Step 4: Configuring PostgreSQL database..."
@@ -66,13 +78,24 @@ print_info "Step 4: Configuring PostgreSQL database..."
 print_info "Setting postgres user password..."
 echo "postgres:${POSTGRES_PASSWORD}" | sudo chpasswd
 
-# Create SonarQube database and user
-sudo -u postgres psql <<EOF
-CREATE USER ${SONAR_DB_USER} WITH ENCRYPTED PASSWORD '${POSTGRES_PASSWORD}';
-CREATE DATABASE ${SONAR_DB_NAME} OWNER ${SONAR_DB_USER};
-GRANT ALL PRIVILEGES ON DATABASE ${SONAR_DB_NAME} TO ${SONAR_DB_USER};
-\q
-EOF
+# Check if sonar user and database already exist
+SONAR_USER_EXISTS=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='${SONAR_DB_USER}'" 2>/dev/null || echo "0")
+SONAR_DB_EXISTS=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='${SONAR_DB_NAME}'" 2>/dev/null || echo "0")
+
+if [ "$SONAR_USER_EXISTS" != "1" ]; then
+    print_info "Creating SonarQube database user..."
+    sudo -u postgres psql -c "CREATE USER ${SONAR_DB_USER} WITH ENCRYPTED PASSWORD '${POSTGRES_PASSWORD}';"
+else
+    print_info "SonarQube user already exists, skipping..."
+fi
+
+if [ "$SONAR_DB_EXISTS" != "1" ]; then
+    print_info "Creating SonarQube database..."
+    sudo -u postgres psql -c "CREATE DATABASE ${SONAR_DB_NAME} OWNER ${SONAR_DB_USER};"
+    sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE ${SONAR_DB_NAME} TO ${SONAR_DB_USER};"
+else
+    print_info "SonarQube database already exists, skipping..."
+fi
 
 print_info "✅ PostgreSQL configured successfully"
 

@@ -472,6 +472,29 @@ sudo systemctl start postgresql
 sudo systemctl enable postgresql
 ```
 
+**If you see "Data directory is not empty" error:**
+
+This means PostgreSQL was partially installed before. The updated scripts now handle this automatically. If you encounter this:
+
+```bash
+# Start PostgreSQL (it's already initialized)
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
+
+# Verify it's running
+sudo systemctl status postgresql
+
+# Check if SonarQube database exists
+sudo -u postgres psql -c "\l" | grep sonarqube
+
+# If database doesn't exist, create it manually:
+sudo -u postgres psql -c "CREATE USER sonar WITH ENCRYPTED PASSWORD 'SonarDB@123';"
+sudo -u postgres psql -c "CREATE DATABASE sonarqube OWNER sonar;"
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE sonarqube TO sonar;"
+```
+
+Then re-run the script - it will skip the database creation and continue with SonarQube installation.
+
 ### Jenkins Won't Start
 
 ```bash
