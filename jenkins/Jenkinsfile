@@ -1,0 +1,179 @@
+pipeline {
+    agent any
+    
+    environment {
+        DOCKER_HUB_CREDENTIALS = credentials('dockerhub-credentials')
+        DOCKER_IMAGE_BACKEND = 'yourdockerhub/productivity-backend'
+        DOCKER_IMAGE_FRONTEND = 'yourdockerhub/productivity-frontend'
+        SONARQUBE_URL = 'http://sonarqube:9000'
+        KUBECONFIG = credentials('kubeconfig')
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+                echo 'Code checkout completed'
+            }
+        }
+        
+        stage('Install Dependencies') {
+            parallel {
+                stage('Backend Dependencies') {
+                    steps {
+                        dir('backend') {
+                            sh 'npm ci'
+                        }
+                    }
+                }
+                stage('Frontend Dependencies') {
+                    steps {
+                        dir('frontend') {
+                            sh 'npm ci'
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Run Tests') {
+            parallel {
+                stage('Backend Tests') {
+                    steps {
+                        dir('backend') {
+                            sh 'npm test'
+                        }
+                    }
+                }
+                stage('Frontend Tests') {
+                    steps {
+                        dir('frontend') {
+                            sh 'npm test -- --watchAll=false'
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('SonarQube Analysis') {
+            steps {
+                script {
+                    def scannerHome = tool 'SonarScanner'
+                    withSonarQubeEnv('SonarQube') {
+                        sh """
+                            ${scannerHome}/bin/sonar-scanner \
+                            -Dsonar.projectKey=employee-productivity-tracker \
+                            -Dsonar.sources=. \
+                            -Dsonar.host.url=${SONARQUBE_URL}
+                        """
+                    }
+                }
+            }
+        }
+        
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+        
+        stage('Build Docker Images') {
+            parallel {
+                stage('Build Backend Image') {
+                    steps {
+                        dir('backend') {
+                            script {
+                                def backendImage = docker.build("${DOCKER_IMAGE_BACKEND}:${BUILD_NUMBER}")
+                                docker.build("${DOCKER_IMAGE_BACKEND}:latest")
+                            }
+                        }
+                    }
+                }
+                stage('Build Frontend Image') {
+                    steps {
+                        dir('frontend') {
+                            script {
+                                def frontendImage = docker.build("${DOCKER_IMAGE_FRONTEND}:${BUILD_NUMBER}")
+                                docker.build("${DOCKER_IMAGE_FRONTEND}:latest")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Push to Docker Hub') {
+            steps {
+                script {
+                    docker.withRegistry('https://registry.hub.docker.com', 'dockerhub-credentials') {
+                        sh """
+                            docker push ${DOCKER_IMAGE_BACKEND}:${BUILD_NUMBER}
+                            docker push ${DOCKER_IMAGE_BACKEND}:latest
+                            docker push ${DOCKER_IMAGE_FRONTEND}:${BUILD_NUMBER}
+                            docker push ${DOCKER_IMAGE_FRONTEND}:latest
+                        """
+                    }
+                }
+            }
+        }
+        
+        stage('Deploy to Kubernetes') {
+            steps {
+                script {
+                    sh """
+                        kubectl apply -f kubernetes/namespace.yaml
+                        kubectl apply -f kubernetes/configmaps/
+                        kubectl apply -f kubernetes/secrets/
+                        kubectl apply -f kubernetes/deployments/
+                        kubectl apply -f kubernetes/services/
+                        kubectl apply -f kubernetes/ingress/
+                        kubectl apply -f kubernetes/hpa.yaml
+                        
+                        # Update image tags
+                        kubectl set image deployment/backend backend=${DOCKER_IMAGE_BACKEND}:${BUILD_NUMBER} -n productivity-tracker
+                        kubectl set image deployment/frontend frontend=${DOCKER_IMAGE_FRONTEND}:${BUILD_NUMBER} -n productivity-tracker
+                        
+                        # Wait for rollout
+                        kubectl rollout status deployment/backend -n productivity-tracker
+                        kubectl rollout status deployment/frontend -n productivity-tracker
+                    """
+                }
+            }
+        }
+        
+        stage('Verify Deployment') {
+            steps {
+                script {
+                    sh """
+                        kubectl get pods -n productivity-tracker
+                        kubectl get services -n productivity-tracker
+                    """
+                }
+            }
+        }
+    }
+    
+    post {
+        success {
+            echo 'Pipeline executed successfully!'
+            emailext (
+                subject: "SUCCESS: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'",
+                body: "Good news! The build ${env.BUILD_NUMBER} completed successfully.",
+                to: 'team@example.com'
+            )
+        }
+        failure {
+            echo 'Pipeline failed!'
+            emailext (
+                subject: "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'",
+                body: "Build ${env.BUILD_NUMBER} failed. Please check the logs.",
+                to: 'team@example.com'
+            )
+        }
+        always {
+            cleanWs()
+        }
+    }
+}

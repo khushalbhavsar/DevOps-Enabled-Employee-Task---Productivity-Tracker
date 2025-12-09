@@ -1,0 +1,34 @@
+{
+  "dashboard": {
+    "title": "Employee Productivity Metrics",
+    "panels": [
+      {
+        "title": "API Request Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(http_requests_total[5m])"
+          }
+        ]
+      },
+      {
+        "title": "Task Completion Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(tasks_completed_total[1h])"
+          }
+        ]
+      },
+      {
+        "title": "Employee Productivity Score",
+        "type": "gauge",
+        "targets": [
+          {
+            "expr": "employee_productivity_score"
+          }
+        ]
+      }
+    ]
+  }
+}

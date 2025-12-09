@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: productivity-tracker
+data:
+  NODE_ENV: "production"
+  PORT: "5000"
+  MONGODB_URI: "mongodb://mongodb-service:27017/productivity-tracker"
+  JWT_EXPIRE: "7d"
+  FRONTEND_URL: "http://frontend-service"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-config
+  namespace: productivity-tracker
+data:
+  REACT_APP_API_URL: "http://backend-service:5000/api"
