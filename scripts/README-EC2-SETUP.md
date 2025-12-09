@@ -455,6 +455,23 @@ java --version
 
 **Note:** The updated scripts automatically install the correct Java version (Amazon Corretto) for Amazon Linux 2023.
 
+### PostgreSQL Setup Issues
+
+If you encounter `command not found: /usr/pgsql-15/bin/postgresql-15-setup`, this is due to the different PostgreSQL paths on Amazon Linux 2023:
+
+```bash
+# The scripts now use the correct command:
+sudo postgresql-setup --initdb
+
+# Verify PostgreSQL is running
+sudo systemctl status postgresql
+
+# If needed, manually initialize:
+sudo postgresql-setup --initdb
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
+```
+
 ### Jenkins Won't Start
 
 ```bash
@@ -496,6 +513,32 @@ curl http://localhost:9100/metrics
 # Restart Prometheus
 sudo systemctl restart prometheus
 ```
+
+### Resuming Failed All-in-One Installation
+
+If the all-in-one installation fails partway through, you have two options:
+
+**Option 1: Run individual component scripts**
+```bash
+# If Jenkins failed, run:
+./setup-jenkins-ec2.sh
+
+# If SonarQube failed, run:
+./setup-sonarqube-ec2.sh
+
+# If Monitoring failed, run:
+./setup-monitoring-ec2.sh
+```
+
+**Option 2: Re-download and re-run the updated script**
+```bash
+# Download the latest version with fixes
+curl -o setup-all-in-one-ec2.sh https://raw.githubusercontent.com/khushalbhavsar/DevOps-Enabled-Employee-Task---Productivity-Tracker/main/scripts/setup-all-in-one-ec2.sh
+chmod +x setup-all-in-one-ec2.sh
+./setup-all-in-one-ec2.sh
+```
+
+The scripts are idempotent - they skip components that are already installed.
 
 ---
 

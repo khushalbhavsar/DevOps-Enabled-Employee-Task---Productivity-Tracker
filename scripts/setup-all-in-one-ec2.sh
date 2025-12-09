@@ -138,7 +138,7 @@ sudo yum install java-17-amazon-corretto.x86_64 -y
 # Install PostgreSQL 15
 print_info "Installing PostgreSQL 15..."
 sudo dnf install postgresql15.x86_64 postgresql15-server -y
-sudo /usr/pgsql-15/bin/postgresql-15-setup initdb
+sudo postgresql-setup --initdb
 sudo systemctl start postgresql
 sudo systemctl enable postgresql
 

@@ -54,7 +54,7 @@ print_info "✅ Java 17 installed successfully"
 # Step 3: Install PostgreSQL 15
 print_info "Step 3: Installing PostgreSQL 15..."
 sudo dnf install postgresql15.x86_64 postgresql15-server -y
-sudo /usr/pgsql-15/bin/postgresql-15-setup initdb
+sudo postgresql-setup --initdb
 sudo systemctl start postgresql
 sudo systemctl enable postgresql
 print_info "✅ PostgreSQL 15 installed successfully"
