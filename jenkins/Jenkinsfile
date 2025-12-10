@@ -1,6 +1,3 @@
-pipeline {
-    agent any
-    
     environment {
         // Docker Configuration
         DOCKER_IMAGE_BACKEND = 'productivity-backend'
@@ -8,31 +5,9 @@ pipeline {
         DOCKER_TAG = "${BUILD_NUMBER}"
         DOCKER_HUB_CREDENTIALS = 'dockerhub-credentials'
         
-        // SonarQube Configuration
-        SONARQUBE_HOST = 'http://sonarqube:9000'
-        SONARQUBE_CREDENTIALS = 'sonarqube-token'
-        
-        // Kubernetes Configuration
-        K8S_NAMESPACE = 'productivity-tracker'
-        K8S_DEPLOYMENT_BACKEND = 'backend'
-        K8S_DEPLOYMENT_FRONTEND = 'frontend'
-        KUBECONFIG = credentials('kubeconfig')
-        
-        // Deployment Target: "docker-compose", "docker", or "k8s"
-        DEPLOY_TARGET = 'k8s'
-    }
-    
-    stages {
-        stage('Checkout') {
-            steps {
-                checkout scm
-                echo '✅ Code checkout completed'
-            }
-        }
-        
-        stage('Install Dependencies') {
-            steps {
-                script {
+        failure {
+            script {
+                echo """
                     echo '📦 Installing dependencies...'
                     parallel(
                         'Backend Dependencies': {
@@ -40,6 +15,9 @@ pipeline {
                                 sh 'npm ci'
                             }
                             echo '✅ Backend dependencies installed'
+                if (env.DEPLOY_TARGET == "k8s") {
+                    node {
+                        sh """
                         },
                         'Frontend Dependencies': {
                             dir('frontend') {
@@ -47,16 +25,27 @@ pipeline {
                             }
                             echo '✅ Frontend dependencies installed'
                         }
+                    }
+                } else if (env.DEPLOY_TARGET == "docker-compose") {
+                    node {
+                        sh """
                     )
                 }
             }
         }
         
+                    }
+                } else {
+                    node {
+                        sh """
         stage('Run Tests') {
             steps {
                 script {
                     echo '🧪 Running tests...'
                     try {
+                    }
+                }
+            }
                         parallel(
                             'Backend Tests': {
                                 dir('backend') {
