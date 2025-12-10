@@ -9,7 +9,7 @@ pipeline {
         DOCKER_HUB_CREDENTIALS = 'dockerhub-credentials'
         
         // SonarQube Configuration
-        SONARQUBE_HOST = 'http://sonarqube:9000'
+        SONARQUBE_HOST = 'http://54.90.132.250:9000'
         SONARQUBE_CREDENTIALS = 'sonarqube-token'
         
         // Kubernetes Configuration
