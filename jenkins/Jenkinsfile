@@ -195,67 +195,49 @@ pipeline {
         stage('Deploy') {
             steps {
                 script {
-                    // Determine if EKS/Kubernetes is available
-                    def eksAvailable = false
+                    def eksRunning = false
                     try {
-                        sh 'kubectl get nodes'
-                        eksAvailable = true
-                        echo "☸️ Kubernetes (EKS) is available"
+                        // Check if EKS cluster is running (replace <cluster-name> and <region> with your values)
+                        def status = sh(script: "aws eks describe-cluster --name <cluster-name> --region <region> --query 'cluster.status' --output text", returnStdout: true).trim()
+                        if (status == 'ACTIVE') {
+                            eksRunning = true
+                        }
                     } catch (Exception e) {
-                        eksAvailable = false
-                        echo "⚠️ Kubernetes (EKS) not available, falling back to Docker deployment"
+                        eksRunning = false
                     }
 
-                    if (eksAvailable) {
-                        echo "🚀 Deploying to Kubernetes..."
-                        withCredentials([usernamePassword(
-                            credentialsId: "${DOCKER_HUB_CREDENTIALS}",
-                            usernameVariable: "DOCKER_USER", 
-                            passwordVariable: "DOCKER_PASS")]) {
-                            sh """
-                                kubectl apply -f kubernetes/namespace.yaml
-                                kubectl apply -f kubernetes/configmaps/
-                                kubectl apply -f kubernetes/secrets/
-                                kubectl apply -f kubernetes/deployments/
-                                kubectl apply -f kubernetes/services/
-                                kubectl apply -f kubernetes/ingress/
-                                kubectl apply -f kubernetes/hpa.yaml
-
-                                kubectl set image deployment/${K8S_DEPLOYMENT_BACKEND} backend=\$DOCKER_USER/${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG} -n ${K8S_NAMESPACE}
-                                kubectl set image deployment/${K8S_DEPLOYMENT_FRONTEND} frontend=\$DOCKER_USER/${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG} -n ${K8S_NAMESPACE}
-
-                                kubectl rollout status deployment/${K8S_DEPLOYMENT_BACKEND} -n ${K8S_NAMESPACE} --timeout=5m
-                                kubectl rollout status deployment/${K8S_DEPLOYMENT_FRONTEND} -n ${K8S_NAMESPACE} --timeout=5m
-                            """
-                        }
-                        env.DEPLOY_TARGET = "k8s"
+                    if (eksRunning) {
+                        echo "🚀 EKS cluster is running. Deploying to Kubernetes..."
+                        sh """
+                            sed -i 's|image: khushalbhavsar/${DOCKER_IMAGE}:.*|image: khushalbhavsar/${DOCKER_IMAGE}:${DOCKER_TAG}|g' k8s/deployment.yaml
+                            kubectl apply -f k8s/namespace.yaml
+                            kubectl apply -f k8s/configmap.yaml
+                            kubectl apply -f k8s/deployment.yaml
+                            kubectl apply -f k8s/service.yaml
+                            kubectl apply -f k8s/hpa.yaml
+                            kubectl rollout status deployment/${K8S_DEPLOYMENT} -n ${K8S_NAMESPACE} --timeout=5m
+                            kubectl get pods -n ${K8S_NAMESPACE}
+                            kubectl get svc -n ${K8S_NAMESPACE}
+                        """
                         echo "✅ Application deployed to Kubernetes successfully"
                     } else {
-                        echo "🚀 Deploying with Docker..."
+                        echo "🚀 EKS cluster is not running. Deploying with Docker..."
                         sh """
-                            docker stop productivity-backend productivity-frontend productivity-mongodb || true
-                            docker rm productivity-backend productivity-frontend productivity-mongodb || true
-                            docker network create productivity-network || true
-
-                            docker run -d --name productivity-mongodb --network productivity-network -p 27017:27017 \
-                                -e MONGO_INITDB_DATABASE=productivity-tracker -v mongodb_data:/data/db --restart unless-stopped mongo:7.0
-
-                            sleep 5
-
-                            docker run -d --name productivity-backend --network productivity-network -p 5000:5000 \
-                                -e NODE_ENV=production -e PORT=5000 \
-                                -e MONGODB_URI=mongodb://productivity-mongodb:27017/productivity-tracker \
-                                -e JWT_SECRET=your-super-secret-jwt-key \
-                                -e JWT_EXPIRE=7d --restart unless-stopped ${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG}
-
-                            docker run -d --name productivity-frontend --network productivity-network -p 3000:80 \
-                                -e REACT_APP_API_URL=http://localhost:5000/api --restart unless-stopped ${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG}
-
+                            docker stop todo-node-app || true
+                            docker rm todo-node-app || true
+                            docker network create todo-network || true
+                            docker run -d \
+                                --name todo-node-app \
+                                --network todo-network \
+                                -p 8000:8000 \
+                                -e NODE_ENV=production \
+                                -e PORT=8000 \
+                                --restart unless-stopped \
+                                khushalbhavsar/${DOCKER_IMAGE}:${DOCKER_TAG}
                             sleep 5
                             docker ps
                         """
-                        env.DEPLOY_TARGET = "docker"
-                        echo "✅ Application deployed with Docker successfully"
+                        echo "✅ Application deployed successfully"
                     }
                 }
             }
