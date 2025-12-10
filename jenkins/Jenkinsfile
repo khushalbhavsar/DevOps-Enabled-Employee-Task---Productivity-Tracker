@@ -5,7 +5,7 @@ pipeline {
         DOCKER_TAG = "${BUILD_NUMBER}"
         REGISTRY_CREDENTIALS = "docker-hub-cred"
         SONARQUBE_CREDENTIALS = "sonarqube-token"
-        SONARQUBE_HOST = "http://34.205.17.141:9000"
+        SONARQUBE_HOST = "http://54.90.132.250:9000"
         K8S_NAMESPACE = "todoapp"
         K8S_DEPLOYMENT = "todoapp-deployment"
         DEPLOY_TARGET = "docker-compose" // Options: "docker" or "k8s"
