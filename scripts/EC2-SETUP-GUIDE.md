@@ -1,13 +1,73 @@
 # EC2 Setup Guide: Jenkins, SonarQube, Grafana-Prometheus-Node Exporter
 
-This guide provides comprehensive instructions for setting up a complete DevOps toolchain on AWS EC2 instances running Amazon Linux 2.
+This guide provides comprehensive instructions for setting up a complete DevOps toolchain on AWS EC2 instances running Amazon Linux 2 or Amazon Linux 2023.
 
 ## 📋 Table of Contents
-1. [Jenkins Setup](#jenkins-setup)
-2. [SonarQube Setup](#sonarqube-setup)
-3. [Grafana-Prometheus-Node Exporter Setup](#grafana-prometheus-node-exporter-setup)
-4. [CPU Stress Testing](#cpu-stress-testing)
-5. [Available Scripts](#available-scripts)
+1. [All-in-One Installation](#all-in-one-installation) ⚡ **NEW**
+2. [Jenkins Setup](#jenkins-setup)
+3. [SonarQube Setup](#sonarqube-setup)
+4. [Grafana-Prometheus-Node Exporter Setup](#grafana-prometheus-node-exporter-setup)
+5. [CPU Stress Testing](#cpu-stress-testing)
+6. [Available Scripts](#available-scripts)
+7. [Troubleshooting](#troubleshooting-tips)
+
+---
+
+## All-in-One Installation
+
+### 🚀 Complete DevOps Stack in One Command
+
+Install Jenkins, SonarQube, Grafana, Prometheus, and Node Exporter with a single script.
+
+#### Instance Requirements
+- **EC2 Type**: t3.xlarge or larger (recommended for all services)
+- **RAM**: 16GB minimum
+- **Storage**: 30GB+ recommended
+- **SG Ports**: 22, 8080 (Jenkins), 9000 (SonarQube), 3000 (Grafana), 9090 (Prometheus), 9100 (Node Exporter)
+- **OS**: Amazon Linux 2023
+
+#### Quick Installation
+
+```bash
+# Download and run directly from GitHub
+curl -o setup-all-in-one-ec2.sh https://raw.githubusercontent.com/khushalbhavsar/DevOps-Enabled-Employee-Task---Productivity-Tracker/main/scripts/setup-all-in-one-ec2.sh
+
+chmod +x setup-all-in-one-ec2.sh
+./setup-all-in-one-ec2.sh
+```
+
+**Environment Variables (Optional):**
+```bash
+export SONAR_DB_PASSWORD="YourSecurePassword"
+export GRAFANA_ADMIN_PASSWORD="YourSecurePassword"
+export GIT_USER_NAME="Your Name"
+export GIT_USER_EMAIL="your.email@example.com"
+```
+
+#### Installation Time
+Approximately **15-20 minutes** for complete setup.
+
+#### What Gets Installed
+
+| Service | Port | Default Credentials |
+|---------|------|---------------------|
+| Jenkins | 8080 | Password shown in console |
+| SonarQube | 9000 | admin / admin |
+| Grafana | 3000 | admin / Admin@123 |
+| Prometheus | 9090 | No authentication |
+| Node Exporter | 9100 | Metrics endpoint |
+
+#### If Installation Fails
+
+If the installation fails (especially during Prometheus setup), run the fix script:
+
+```bash
+# Download and run the fix script
+curl -o fix-prometheus-install.sh https://raw.githubusercontent.com/khushalbhavsar/DevOps-Enabled-Employee-Task---Productivity-Tracker/main/scripts/fix-prometheus-install.sh
+
+chmod +x fix-prometheus-install.sh
+./fix-prometheus-install.sh
+```
 
 ---
 
@@ -661,6 +721,81 @@ chmod +x setup-monitoring-ec2.sh
 export GRAFANA_ADMIN_PASSWORD="YourSecurePassword"
 ./setup-monitoring-ec2.sh
 ```
+
+---
+
+### 4. stress-test-cpu.sh
+**Purpose:** CPU stress testing for monitoring validation  
+**Requirements:** Any EC2 instance with monitoring stack
+
+**Usage:**
+```bash
+chmod +x stress-test-cpu.sh
+./stress-test-cpu.sh
+# Press CTRL+C to stop
+```
+
+---
+
+### 5. setup-all-in-one-ec2.sh ⚡ **NEW**
+**Purpose:** Install complete DevOps stack in one command  
+**Requirements:**
+- EC2 Type: t3.xlarge or larger
+- RAM: 16GB minimum
+- Ports: 22, 8080, 9000, 3000, 9090, 9100
+
+**Environment Variables:**
+- `SONAR_DB_PASSWORD` - SonarQube DB password (default: "SonarDB@123")
+- `GRAFANA_ADMIN_PASSWORD` - Grafana admin password (default: "Admin@123")
+- `GIT_USER_NAME` - Git username (default: "DevOps User")
+- `GIT_USER_EMAIL` - Git email (default: "devops@example.com")
+
+**Installs:**
+- Jenkins with Docker, Maven, Java 21
+- SonarQube with PostgreSQL 15
+- Grafana Enterprise 11.4.0
+- Prometheus 3.0.1 with alerting
+- Node Exporter 1.8.2
+
+**Usage:**
+```bash
+# Download directly from GitHub
+curl -o setup-all-in-one-ec2.sh https://raw.githubusercontent.com/khushalbhavsar/DevOps-Enabled-Employee-Task---Productivity-Tracker/main/scripts/setup-all-in-one-ec2.sh
+
+chmod +x setup-all-in-one-ec2.sh
+
+# Optional: Set environment variables
+export SONAR_DB_PASSWORD="YourPassword"
+export GRAFANA_ADMIN_PASSWORD="YourPassword"
+
+./setup-all-in-one-ec2.sh
+```
+
+**Installation Time:** ~15-20 minutes
+
+---
+
+### 6. fix-prometheus-install.sh 🔧 **NEW**
+**Purpose:** Fix Prometheus installation if all-in-one script fails  
+**Requirements:** Run on EC2 where all-in-one installation failed
+
+**Usage:**
+```bash
+# Download and run
+curl -o fix-prometheus-install.sh https://raw.githubusercontent.com/khushalbhavsar/DevOps-Enabled-Employee-Task---Productivity-Tracker/main/scripts/fix-prometheus-install.sh
+
+chmod +x fix-prometheus-install.sh
+./fix-prometheus-install.sh
+```
+
+This script will:
+- Clean up partial Prometheus installation
+- Properly install Prometheus 3.0.1
+- Install Node Exporter 1.8.2
+- Configure alerting rules
+- Start all monitoring services
+
+---
 
 ## Security Notes
 

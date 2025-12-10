@@ -197,7 +197,7 @@ EOF
 
 # Create sonar user
 print_info "Creating sonar user..."
-sudo useradd -r -s /bin/false sonar
+sudo useradd -r -s /bin/false sonar 2>/dev/null || true
 sudo chown -R sonar:sonar /opt/sonarqube
 sudo chmod -R 755 /opt/sonarqube/bin/
 sudo chmod +x /opt/sonarqube/bin/linux-x86-64/sonar.sh
@@ -280,13 +280,21 @@ wget -q https://github.com/prometheus/prometheus/releases/download/v3.0.1/promet
 tar -xzf prometheus-3.0.1.linux-amd64.tar.gz
 mv prometheus-3.0.1.linux-amd64 prometheus
 
-sudo useradd --no-create-home --shell /bin/false prometheus
+# Create Prometheus user if doesn't exist
+sudo useradd --no-create-home --shell /bin/false prometheus 2>/dev/null || true
 
 cd prometheus
 sudo cp prometheus /usr/local/bin/
 sudo cp promtool /usr/local/bin/
 sudo mkdir -p /etc/prometheus /var/lib/prometheus
-sudo cp -r consoles/ console_libraries/ /etc/prometheus/
+
+# Copy console files if they exist
+if [ -d "consoles" ]; then
+    sudo cp -r consoles /etc/prometheus/
+fi
+if [ -d "console_libraries" ]; then
+    sudo cp -r console_libraries /etc/prometheus/
+fi
 sudo cp prometheus.yml /etc/prometheus/
 
 sudo chown -R prometheus:prometheus /etc/prometheus /var/lib/prometheus
@@ -322,7 +330,8 @@ tar xzf node_exporter-1.8.2.linux-amd64.tar.gz
 cd node_exporter-1.8.2.linux-amd64
 
 sudo cp node_exporter /usr/local/bin
-sudo useradd --no-create-home --shell /bin/false node_exporter
+# Create node_exporter user if doesn't exist
+sudo useradd --no-create-home --shell /bin/false node_exporter 2>/dev/null || true
 sudo chown node_exporter:node_exporter /usr/local/bin/node_exporter
 
 # Create Node Exporter service
