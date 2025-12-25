@@ -10,7 +10,7 @@ pipeline {
         DOCKER_IMAGE_FRONTEND = 'productivity-frontend'
         DOCKER_TAG = "${BUILD_NUMBER}"
         DOCKER_HUB_CREDENTIALS = 'dockerHubCreds'
-        DOCKER_REGISTRY = 'yourdockerhub'  // Change to your Docker Hub username
+        DOCKER_REGISTRY = 'khushalbhavsar'  // Change to your Docker Hub username
         
         // SonarQube Configuration
         SONARQUBE_HOST = 'http://localhost:9000'
