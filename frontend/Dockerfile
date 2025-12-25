@@ -5,14 +5,16 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies - npm install with force handles conflicts better than audit fix
-RUN npm install --legacy-peer-deps --force --no-audit --no-fund
+# Install dependencies with comprehensive conflict resolution
+RUN npm install --legacy-peer-deps --no-fund && \
+    npm install ajv-keywords@latest --save-dev --legacy-peer-deps && \
+    npm install ajv@latest --save-dev --legacy-peer-deps
 
 # Copy source code
 COPY . .
 
 # Build application
-RUN npm run build
+RUN CI=false npm run build
 
 # Production stage
 FROM nginx:alpine
