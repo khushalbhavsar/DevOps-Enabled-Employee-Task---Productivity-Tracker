@@ -5,8 +5,8 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies with conflict resolution
-RUN npm install --legacy-peer-deps --force --no-audit && npm audit fix --force 2>/dev/null || true
+# Install dependencies - npm install with force handles conflicts better than audit fix
+RUN npm install --legacy-peer-deps --force --no-audit --no-fund
 
 # Copy source code
 COPY . .
