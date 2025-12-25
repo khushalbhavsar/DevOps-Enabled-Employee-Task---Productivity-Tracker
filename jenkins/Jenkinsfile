@@ -1,11 +1,6 @@
 pipeline {
     agent any
     
-    tools {
-        nodejs 'node18'
-    }
-
-
     environment {
         // Docker Configuration
         DOCKER_IMAGE_BACKEND = 'productivity-backend'
@@ -23,11 +18,35 @@ pipeline {
         K8S_DEPLOYMENT_BACKEND = 'backend-deployment'
         K8S_DEPLOYMENT_FRONTEND = 'frontend-deployment'
         
-        // Deployment Target (initial value, will be dynamically determined)
+        // Deployment Target
         DEPLOY_TARGET = 'docker'
     }
     
     stages {
+        stage('System Dependencies') {
+            steps {
+                script {
+                    echo "📦 Installing system dependencies..."
+                    sh """
+                        # Update system packages
+                        sudo yum update -y || sudo apt-get update -y
+                        
+                        # Install required libraries for Node.js
+                        sudo yum install -y gcc-c++ make libatomic || sudo apt-get install -y build-essential libatomic1
+                        
+                        # Install Node.js if not present
+                        if ! command -v node &> /dev/null; then
+                            curl -fsSL https://rpm.nodesource.com/setup_18.x | sudo bash - || true
+                            sudo yum install -y nodejs || sudo apt-get install -y nodejs npm
+                        fi
+                        
+                        node -v
+                        npm -v
+                    """
+                }
+            }
+        }
+
         stage('Checkout') {
             steps {
                 checkout scm
@@ -40,9 +59,11 @@ pipeline {
                 stage('Backend Dependencies') {
                     steps {
                         dir('backend') {
-                            sh 'node -v'
-                            sh 'npm -v'
-                            sh 'npm ci'
+                            sh '''
+                                echo "📦 Installing backend dependencies..."
+                                npm ci --legacy-peer-deps
+                                echo "✅ Backend dependencies installed"
+                            '''
                         }
                     }
                 }
@@ -50,9 +71,11 @@ pipeline {
                 stage('Frontend Dependencies') {
                     steps {
                         dir('frontend') {
-                            sh 'node -v'
-                            sh 'npm -v'
-                            sh 'npm ci'
+                            sh '''
+                                echo "📦 Installing frontend dependencies..."
+                                npm ci --legacy-peer-deps
+                                echo "✅ Frontend dependencies installed"
+                            '''
                         }
                     }
                 }
