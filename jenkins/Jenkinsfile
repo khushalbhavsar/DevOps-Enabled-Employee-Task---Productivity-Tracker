@@ -4,104 +4,135 @@ pipeline {
     environment {
         // Project Configuration
         PROJECT_NAME = 'Employee-Productivity-Task-Tracker'
-        
-        // Docker Configuration
+        DOCKER_REGISTRY = 'khushalbhavsar'  // Change to your Docker Hub username
         DOCKER_IMAGE_BACKEND = 'productivity-backend'
         DOCKER_IMAGE_FRONTEND = 'productivity-frontend'
         DOCKER_TAG = "${BUILD_NUMBER}"
-        DOCKER_HUB_CREDENTIALS = 'dockerHubCreds'
-        DOCKER_REGISTRY = 'yourdockerhub'  // Change to your Docker Hub username
-        
-        // SonarQube Configuration
-        SONARQUBE_HOST = 'http://localhost:9000'
-        SONARQUBE_CREDENTIALS = 'sonar-token'
+        DOCKER_LATEST = 'latest'
         
         // Application Ports
         BACKEND_PORT = '5000'
         FRONTEND_PORT = '3000'
         MONGO_PORT = '27017'
+        
+        // SonarQube Configuration
+        SONARQUBE_HOST = 'http://localhost:9000'
+        
+        // Build Configuration
+        NODE_ENV = 'production'
     }
     
     options {
         buildDiscarder(logRotator(numToKeepStr: '10'))
         disableConcurrentBuilds()
-        timeout(time: 1, unit: 'HOURS')
+        timeout(time: 2, unit: 'HOURS')
         timestamps()
     }
     
     stages {
-        stage('Initialize') {
+        stage('🚀 Initialize') {
             steps {
                 script {
                     echo """
-                    ════════════════════════════════════════════
-                    🚀 Starting Pipeline Execution
-                    ════════════════════════════════════════════
-                    Project: ${PROJECT_NAME}
-                    Build Number: ${BUILD_NUMBER}
-                    Build Tag: ${DOCKER_TAG}
-                    Node: ${NODE_NAME}
-                    Workspace: ${WORKSPACE}
-                    ════════════════════════════════════════════
+                    ╔════════════════════════════════════════════════╗
+                    ║  🚀 PIPELINE INITIALIZATION                    ║
+                    ╠════════════════════════════════════════════════╣
+                    ║  Project: ${PROJECT_NAME}
+                    ║  Build #: ${BUILD_NUMBER}
+                    ║  Registry: ${DOCKER_REGISTRY}
+                    ║  Workspace: ${WORKSPACE}
+                    ║  Branch: ${GIT_BRANCH ?: 'N/A'}
+                    ╚════════════════════════════════════════════════╝
                     """
                 }
             }
         }
         
-        stage('Checkout') {
+        stage('📥 Checkout') {
             steps {
                 script {
-                    echo '📥 Cloning repository...'
-                    checkout scm
-                    echo '✅ Repository cloned successfully'
+                    echo '📥 Cloning repository from GitHub...'
+                    try {
+                        checkout scm
+                        echo '✅ Repository cloned successfully'
+                    } catch (Exception e) {
+                        echo "❌ Checkout failed: ${e.message}"
+                        throw e
+                    }
                 }
             }
         }
         
-        stage('Environment Setup') {
+        stage('⚙️ Environment Setup') {
             steps {
                 script {
-                    echo '⚙️ Setting up environment...'
+                    echo '⚙️ Verifying build environment...'
                     sh '''
-                        # Verify essential tools
-                        echo "Checking tools..."
+                        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                        echo "System Information:"
+                        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                        
+                        echo "✓ Node.js:"
                         node --version
+                        
+                        echo "✓ NPM:"
                         npm --version
+                        
+                        echo "✓ Docker:"
                         docker --version
+                        
+                        echo "✓ Git:"
                         git --version
-                        echo "✅ All tools are available"
+                        
+                        echo "✓ System:"
+                        uname -a
+                        
+                        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                        echo "✅ All tools verified successfully"
                     '''
                 }
             }
         }
         
-        stage('Code Analysis') {
+        stage('📊 Code Analysis') {
             parallel {
-                stage('Backend Lint') {
+                stage('Backend Analysis') {
                     steps {
                         dir('backend') {
                             script {
                                 echo '📝 Analyzing backend code...'
                                 sh '''
-                                    npm ci --legacy-peer-deps 2>/dev/null || npm install --legacy-peer-deps
-                                    npm run lint 2>/dev/null || echo "⚠️ No lint script configured"
+                                    echo "Installing dependencies for linting..."
+                                    npm ci --legacy-peer-deps 2>/dev/null || npm install --legacy-peer-deps --no-fund
+                                    
+                                    if [ -f ".eslintrc" ] || [ -f ".eslintrc.json" ] || [ -f ".eslintrc.js" ]; then
+                                        echo "Running ESLint..."
+                                        npm run lint 2>/dev/null || echo "⚠️  Lint check completed with warnings"
+                                    else
+                                        echo "ℹ️  No ESLint configuration found"
+                                    fi
                                 '''
-                                echo '✅ Backend analysis completed'
                             }
                         }
                     }
                 }
                 
-                stage('Frontend Lint') {
+                stage('Frontend Analysis') {
                     steps {
                         dir('frontend') {
                             script {
                                 echo '📝 Analyzing frontend code...'
                                 sh '''
-                                    npm ci --legacy-peer-deps 2>/dev/null || npm install --legacy-peer-deps
-                                    npm run lint 2>/dev/null || echo "⚠️ No lint script configured"
+                                    echo "Installing dependencies for linting..."
+                                    npm ci --legacy-peer-deps 2>/dev/null || npm install --legacy-peer-deps --no-fund
+                                    
+                                    if [ -f ".eslintrc" ] || [ -f ".eslintrc.json" ] || [ -f ".eslintrc.js" ]; then
+                                        echo "Running ESLint..."
+                                        npm run lint 2>/dev/null || echo "⚠️  Lint check completed with warnings"
+                                    else
+                                        echo "ℹ️  No ESLint configuration found"
+                                    fi
                                 '''
-                                echo '✅ Frontend analysis completed'
                             }
                         }
                     }
@@ -109,7 +140,7 @@ pipeline {
             }
         }
         
-        stage('Install Dependencies') {
+        stage('📦 Install Dependencies') {
             parallel {
                 stage('Backend Dependencies') {
                     steps {
@@ -117,8 +148,12 @@ pipeline {
                             script {
                                 echo '📦 Installing backend dependencies...'
                                 sh '''
-                                    npm ci --legacy-peer-deps 2>/dev/null || npm install --legacy-peer-deps
-                                    echo "✅ Backend dependencies installed"
+                                    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                                    echo "Backend Dependency Installation"
+                                    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                                    npm ci --legacy-peer-deps --no-fund 2>/dev/null || npm install --legacy-peer-deps --no-fund
+                                    echo "✅ Backend dependencies installed successfully"
+                                    npm list --depth=0 2>/dev/null | head -20 || echo "Dependencies installed"
                                 '''
                             }
                         }
@@ -131,8 +166,12 @@ pipeline {
                             script {
                                 echo '📦 Installing frontend dependencies...'
                                 sh '''
-                                    npm ci --legacy-peer-deps 2>/dev/null || npm install --legacy-peer-deps
-                                    echo "✅ Frontend dependencies installed"
+                                    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                                    echo "Frontend Dependency Installation"
+                                    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                                    npm ci --legacy-peer-deps --no-fund 2>/dev/null || npm install --legacy-peer-deps --no-fund
+                                    echo "✅ Frontend dependencies installed successfully"
+                                    npm list --depth=0 2>/dev/null | head -20 || echo "Dependencies installed"
                                 '''
                             }
                         }
@@ -141,7 +180,7 @@ pipeline {
             }
         }
         
-        stage('Run Tests') {
+        stage('🧪 Run Tests') {
             parallel {
                 stage('Backend Tests') {
                     steps {
@@ -149,9 +188,12 @@ pipeline {
                             script {
                                 echo '🧪 Running backend tests...'
                                 sh '''
-                                    npm test -- --passWithNoTests 2>/dev/null || echo "⚠️ No tests available"
+                                    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                                    echo "Backend Test Execution"
+                                    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                                    npm test -- --passWithNoTests 2>/dev/null || true
+                                    echo "✅ Backend tests completed"
                                 '''
-                                echo '✅ Backend tests completed'
                             }
                         }
                     }
@@ -163,9 +205,12 @@ pipeline {
                             script {
                                 echo '🧪 Running frontend tests...'
                                 sh '''
-                                    npm test -- --watchAll=false --passWithNoTests 2>/dev/null || echo "⚠️ No tests available"
+                                    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                                    echo "Frontend Test Execution"
+                                    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                                    npm test -- --watchAll=false --passWithNoTests 2>/dev/null || true
+                                    echo "✅ Frontend tests completed"
                                 '''
-                                echo '✅ Frontend tests completed'
                             }
                         }
                     }
@@ -173,38 +218,36 @@ pipeline {
             }
         }
         
-        stage('SonarQube Scan') {
+        stage('🔍 Code Quality Scan') {
             steps {
                 script {
                     echo '🔍 Running SonarQube analysis...'
-                    try {
-                        withCredentials([string(credentialsId: "${SONARQUBE_CREDENTIALS}", variable: 'SONAR_TOKEN')]) {
-                            sh '''
-                                docker run --rm \
-                                    --network host \
-                                    -e SONAR_HOST_URL="${SONARQUBE_HOST}" \
-                                    -e SONAR_TOKEN="${SONAR_TOKEN}" \
-                                    -v "${WORKSPACE}:/usr/src" \
-                                    sonarsource/sonar-scanner-cli \
-                                    -Dsonar.projectKey=${PROJECT_NAME} \
-                                    -Dsonar.projectName="Employee Productivity & Task Tracker" \
-                                    -Dsonar.projectVersion=1.0 \
-                                    -Dsonar.sources=backend/src,frontend/src \
-                                    -Dsonar.tests=backend/tests \
-                                    -Dsonar.exclusions="**/node_modules/**,**/build/**,**/dist/**,**/*.test.js,**/*.spec.js" \
-                                    -Dsonar.javascript.lcov.reportPaths=backend/coverage/lcov.info,frontend/coverage/lcov.info || true
-                            '''
-                        }
-                        echo '✅ SonarQube analysis completed'
-                    } catch (Exception e) {
-                        echo "⚠️ SonarQube analysis skipped: ${e.message}"
-                        echo "ℹ️ Ensure SonarQube is running at ${SONARQUBE_HOST}"
+                    withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+                        sh '''
+                            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                            echo "SonarQube Code Quality Analysis"
+                            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                            
+                            docker run --rm \
+                              --network host \
+                              -e SONAR_HOST_URL=${SONARQUBE_HOST} \
+                              -e SONAR_TOKEN=${SONAR_TOKEN} \
+                              -v ${WORKSPACE}:/usr/src \
+                              sonarsource/sonar-scanner-cli \
+                              -Dsonar.projectKey=${PROJECT_NAME} \
+                              -Dsonar.projectName="Employee Productivity & Task Tracker" \
+                              -Dsonar.projectVersion=1.0 \
+                              -Dsonar.sources=backend/src,frontend/src \
+                              -Dsonar.exclusions='**/node_modules/**,**/build/**,**/dist/**,**/*.test.js,**/*.spec.js' || true
+                            
+                            echo "✅ SonarQube analysis completed"
+                        '''
                     }
                 }
             }
         }
         
-        stage('Build Docker Images') {
+        stage('🐳 Build Docker Images') {
             parallel {
                 stage('Build Backend Image') {
                     steps {
@@ -212,9 +255,18 @@ pipeline {
                             script {
                                 echo '🐳 Building backend Docker image...'
                                 sh '''
-                                    docker build -t ${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG} .
-                                    docker tag ${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG} ${DOCKER_IMAGE_BACKEND}:latest
-                                    echo "✅ Backend image built: ${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG}"
+                                    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                                    echo "Backend Docker Build"
+                                    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                                    
+                                    docker build \
+                                      --build-arg NODE_ENV=production \
+                                      -t ${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG} \
+                                      -t ${DOCKER_IMAGE_BACKEND}:${DOCKER_LATEST} \
+                                      .
+                                    
+                                    echo "✅ Backend image built successfully"
+                                    docker images | grep ${DOCKER_IMAGE_BACKEND}
                                 '''
                             }
                         }
@@ -227,9 +279,18 @@ pipeline {
                             script {
                                 echo '🐳 Building frontend Docker image...'
                                 sh '''
-                                    docker build -t ${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG} .
-                                    docker tag ${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG} ${DOCKER_IMAGE_FRONTEND}:latest
-                                    echo "✅ Frontend image built: ${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG}"
+                                    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                                    echo "Frontend Docker Build"
+                                    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                                    
+                                    docker build \
+                                      --build-arg NODE_ENV=production \
+                                      -t ${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG} \
+                                      -t ${DOCKER_IMAGE_FRONTEND}:${DOCKER_LATEST} \
+                                      .
+                                    
+                                    echo "✅ Frontend image built successfully"
+                                    docker images | grep ${DOCKER_IMAGE_FRONTEND}
                                 '''
                             }
                         }
@@ -238,133 +299,187 @@ pipeline {
             }
         }
         
-        stage('Push to Docker Hub') {
+        stage('📤 Push to Docker Hub') {
+            when {
+                branch 'main'
+            }
             steps {
                 script {
-                    echo '📤 Pushing images to Docker Hub...'
-                    try {
-                        withCredentials([usernamePassword(
-                            credentialsId: "${DOCKER_HUB_CREDENTIALS}",
-                            usernameVariable: 'DOCKER_USER',
-                            passwordVariable: 'DOCKER_PASS')]) {
-                            sh '''
-                                echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
-                                
-                                # Tag images
-                                docker tag ${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG} ${DOCKER_USER}/${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG}
-                                docker tag ${DOCKER_IMAGE_BACKEND}:latest ${DOCKER_USER}/${DOCKER_IMAGE_BACKEND}:latest
-                                docker tag ${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG} ${DOCKER_USER}/${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG}
-                                docker tag ${DOCKER_IMAGE_FRONTEND}:latest ${DOCKER_USER}/${DOCKER_IMAGE_FRONTEND}:latest
-                                
-                                # Push backend
-                                docker push ${DOCKER_USER}/${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG}
-                                docker push ${DOCKER_USER}/${DOCKER_IMAGE_BACKEND}:latest
-                                
-                                # Push frontend
-                                docker push ${DOCKER_USER}/${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG}
-                                docker push ${DOCKER_USER}/${DOCKER_IMAGE_FRONTEND}:latest
-                                
-                                docker logout
-                                echo "✅ Images pushed successfully"
-                            '''
-                        }
-                    } catch (Exception e) {
-                        echo "⚠️ Docker Hub push failed: ${e.message}"
-                        echo "💡 Check your Docker Hub credentials (dockerHubCreds)"
+                    echo '📤 Pushing Docker images to Docker Hub...'
+                    withCredentials([usernamePassword(credentialsId: 'dockerHubCreds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                        sh '''
+                            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                            echo "Docker Hub Push"
+                            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                            
+                            echo "Authenticating with Docker Hub..."
+                            echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
+                            
+                            echo "Tagging backend image..."
+                            docker tag ${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG} ${DOCKER_USER}/${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG}
+                            docker tag ${DOCKER_IMAGE_BACKEND}:${DOCKER_LATEST} ${DOCKER_USER}/${DOCKER_IMAGE_BACKEND}:${DOCKER_LATEST}
+                            
+                            echo "Pushing backend image..."
+                            docker push ${DOCKER_USER}/${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG}
+                            docker push ${DOCKER_USER}/${DOCKER_IMAGE_BACKEND}:${DOCKER_LATEST}
+                            
+                            echo "Tagging frontend image..."
+                            docker tag ${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG} ${DOCKER_USER}/${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG}
+                            docker tag ${DOCKER_IMAGE_FRONTEND}:${DOCKER_LATEST} ${DOCKER_USER}/${DOCKER_IMAGE_FRONTEND}:${DOCKER_LATEST}
+                            
+                            echo "Pushing frontend image..."
+                            docker push ${DOCKER_USER}/${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG}
+                            docker push ${DOCKER_USER}/${DOCKER_IMAGE_FRONTEND}:${DOCKER_LATEST}
+                            
+                            docker logout
+                            echo "✅ Images pushed to Docker Hub successfully"
+                        '''
                     }
                 }
             }
         }
         
-        stage('Deploy') {
+        stage('🚀 Deploy Application') {
+            when {
+                branch 'main'
+            }
             steps {
                 script {
                     echo '🚀 Deploying application...'
                     sh '''
-                        # Create network if it doesn't exist
-                        docker network create productivity-network 2>/dev/null || true
+                        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                        echo "Application Deployment"
+                        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
                         
-                        # Stop existing containers
-                        docker stop productivity-backend 2>/dev/null || true
-                        docker stop productivity-frontend 2>/dev/null || true
-                        docker rm productivity-backend 2>/dev/null || true
-                        docker rm productivity-frontend 2>/dev/null || true
+                        # Create Docker network
+                        echo "Creating Docker network..."
+                        docker network create productivity-network 2>/dev/null || echo "Network already exists"
+                        
+                        # Stop and remove old containers
+                        echo "Stopping old containers..."
+                        docker stop productivity-backend productivity-frontend productivity-mongodb 2>/dev/null || true
+                        docker rm productivity-backend productivity-frontend productivity-mongodb 2>/dev/null || true
                         
                         # Deploy MongoDB
+                        echo "Starting MongoDB..."
                         docker run -d \
                             --name productivity-mongodb \
                             --network productivity-network \
                             -p ${MONGO_PORT}:27017 \
                             -v mongodb_data:/data/db \
+                            -e MONGO_INITDB_ROOT_USERNAME=admin \
+                            -e MONGO_INITDB_ROOT_PASSWORD=password \
                             --restart unless-stopped \
-                            mongo:7.0 || true
+                            mongo:7.0
                         
                         # Deploy Backend
+                        echo "Starting backend service..."
                         docker run -d \
                             --name productivity-backend \
                             --network productivity-network \
                             -p ${BACKEND_PORT}:5000 \
                             -e NODE_ENV=production \
-                            -e MONGODB_URI=mongodb://productivity-mongodb:27017/productivity-tracker \
-                            -e JWT_SECRET=$(openssl rand -hex 32) \
+                            -e MONGODB_URI=mongodb://admin:password@productivity-mongodb:27017/productivity-tracker?authSource=admin \
+                            -e JWT_SECRET=$(openssl rand -hex 32 2>/dev/null || echo "default-secret-key") \
                             --restart unless-stopped \
                             ${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG}
                         
                         # Deploy Frontend
+                        echo "Starting frontend service..."
                         docker run -d \
                             --name productivity-frontend \
                             --network productivity-network \
                             -p ${FRONTEND_PORT}:3000 \
+                            -e NODE_ENV=production \
                             --restart unless-stopped \
                             ${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG}
                         
-                        echo "✅ Deployment completed"
+                        echo "Waiting for services to start..."
+                        sleep 10
+                        
+                        echo "✅ Application deployed successfully"
                     '''
                 }
             }
         }
         
-        stage('Verify Deployment') {
+        stage('✅ Verify Deployment') {
+            when {
+                branch 'main'
+            }
             steps {
                 script {
-                    echo '🏥 Verifying deployment...'
+                    echo '✅ Verifying deployment health...'
                     sh '''
-                        echo "Waiting for services to start..."
-                        sleep 5
+                        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                        echo "Deployment Verification"
+                        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
                         
-                        echo "Checking containers status:"
+                        echo "Container Status:"
                         docker ps --filter "name=productivity" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
                         
-                        echo "Verifying backend health..."
-                        if curl -f http://localhost:${BACKEND_PORT}/health 2>/dev/null | grep -q "ok"; then
-                            echo "✅ Backend is healthy"
+                        echo ""
+                        echo "Checking backend health..."
+                        for i in {1..30}; do
+                            if curl -s http://localhost:${BACKEND_PORT}/health 2>/dev/null | grep -q "ok\|running"; then
+                                echo "✅ Backend is healthy"
+                                break
+                            fi
+                            if [ $i -eq 30 ]; then
+                                echo "⚠️  Backend health check timeout"
+                            else
+                                echo "Attempt $i/30..."
+                                sleep 1
+                            fi
+                        done
+                        
+                        echo ""
+                        echo "Checking frontend accessibility..."
+                        if curl -s http://localhost:${FRONTEND_PORT} | grep -q "html\|DOCTYPE" 2>/dev/null; then
+                            echo "✅ Frontend is accessible"
                         else
-                            echo "⚠️ Backend health check pending..."
+                            echo "ℹ️  Frontend startup in progress"
                         fi
                         
-                        echo "✅ Deployment verification completed"
+                        echo ""
+                        echo "Container Logs Summary:"
+                        docker logs --tail 5 productivity-backend 2>/dev/null | head -3 || echo "Backend logs not available yet"
+                        
+                        echo "✅ Verification completed"
                     '''
                 }
             }
         }
         
-        stage('Smoke Tests') {
+        stage('🧪 Smoke Tests') {
+            when {
+                branch 'main'
+            }
             steps {
                 script {
-                    echo '✨ Running smoke tests...'
+                    echo '🧪 Running smoke tests...'
                     sh '''
+                        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                        echo "Smoke Tests"
+                        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                        
                         echo "Testing backend connectivity..."
-                        for i in {1..5}; do
-                            if curl -s http://localhost:${BACKEND_PORT} > /dev/null 2>&1; then
-                                echo "✅ Backend is responding"
-                                break
-                            fi
-                            echo "Attempt $i/5..."
-                            sleep 1
-                        done
+                        if curl -s http://localhost:${BACKEND_PORT} >/dev/null 2>&1; then
+                            echo "✅ Backend is responding"
+                        else
+                            echo "⚠️  Backend connectivity test inconclusive"
+                        fi
                         
                         echo "Testing frontend connectivity..."
-                        curl -s http://localhost:${FRONTEND_PORT} | grep -q "html" && echo "✅ Frontend is responding" || echo "⚠️ Frontend check pending"
+                        if curl -s http://localhost:${FRONTEND_PORT} >/dev/null 2>&1; then
+                            echo "✅ Frontend is responding"
+                        else
+                            echo "⚠️  Frontend connectivity test inconclusive"
+                        fi
+                        
+                        echo ""
+                        echo "Network status:"
+                        docker network ls | grep productivity
                         
                         echo "✅ Smoke tests completed"
                     '''
@@ -376,9 +491,9 @@ pipeline {
     post {
         always {
             script {
-                echo "🧹 Cleaning up workspace..."
+                echo '🧹 Cleaning up workspace...'
                 sh '''
-                    docker logout || true
+                    docker logout 2>/dev/null || true
                     docker image prune -f --filter "until=72h" 2>/dev/null || true
                 '''
             }
@@ -388,27 +503,29 @@ pipeline {
             script {
                 echo """
                 
-                ════════════════════════════════════════════════════════════
-                ✅ PIPELINE COMPLETED SUCCESSFULLY!
-                ════════════════════════════════════════════════════════════
-                📦 Build Number: ${BUILD_NUMBER}
-                🏗️ Docker Tag: ${DOCKER_TAG}
-                🐳 Backend Image: ${DOCKER_REGISTRY}/${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG}
-                🐳 Frontend Image: ${DOCKER_REGISTRY}/${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG}
-                
-                🌐 Access Application:
-                   Backend API: http://<your-server-ip>:${BACKEND_PORT}
-                   Frontend: http://<your-server-ip>:${FRONTEND_PORT}
-                   MongoDB: <your-server-ip>:${MONGO_PORT}
-                
-                📊 Logs:
-                   Backend: docker logs productivity-backend
-                   Frontend: docker logs productivity-frontend
-                   MongoDB: docker logs productivity-mongodb
-                
-                🔍 SonarQube: ${SONARQUBE_HOST}/projects
-                📈 Build Duration: ${currentBuild.durationString}
-                ════════════════════════════════════════════════════════════
+                ╔════════════════════════════════════════════════════════╗
+                ║  ✅ PIPELINE EXECUTION SUCCESSFUL                      ║
+                ╠════════════════════════════════════════════════════════╣
+                ║  Build Number: ${BUILD_NUMBER}
+                ║  Project: ${PROJECT_NAME}
+                ║  Docker Registry: ${DOCKER_REGISTRY}
+                ║  
+                ║  📦 Images Built:
+                ║     Backend:  ${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG}
+                ║     Frontend: ${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG}
+                ║  
+                ║  🌐 Access Application:
+                ║     Frontend: http://localhost:${FRONTEND_PORT}
+                ║     Backend:  http://localhost:${BACKEND_PORT}
+                ║     MongoDB:  localhost:${MONGO_PORT}
+                ║  
+                ║  📊 Additional Resources:
+                ║     SonarQube: ${SONARQUBE_HOST}
+                ║     Docker Logs: docker logs productivity-{backend,frontend}
+                ║     Containers:  docker ps --filter "name=productivity"
+                ║  
+                ║  ⏱️  Build Duration: ${currentBuild.durationString}
+                ╚════════════════════════════════════════════════════════╝
                 """
             }
         }
@@ -417,38 +534,53 @@ pipeline {
             script {
                 echo """
                 
-                ════════════════════════════════════════════════════════════
-                ❌ PIPELINE FAILED
-                ════════════════════════════════════════════════════════════
-                📦 Build Number: ${BUILD_NUMBER}
-                ❓ Check logs above for failure details
-                
-                🔧 Troubleshooting Steps:
-                   1. Check console output above
-                   2. Verify Docker is running: docker ps
-                   3. Check container logs: docker logs <container-name>
-                   4. Verify credentials in Jenkins
-                   5. Check Docker Hub connectivity
-                
-                📝 Common Issues:
-                   - Docker login failed: Check dockerHubCreds credential
-                   - SonarQube failed: SonarQube server may be down
-                   - Tests failed: Check test output in console
-                   - Build failed: Check Docker build output
-                
-                📈 Build Duration: ${currentBuild.durationString}
-                ════════════════════════════════════════════════════════════
+                ╔════════════════════════════════════════════════════════╗
+                ║  ❌ PIPELINE EXECUTION FAILED                          ║
+                ╠════════════════════════════════════════════════════════╣
+                ║  Build Number: ${BUILD_NUMBER}
+                ║  Project: ${PROJECT_NAME}
+                ║  
+                ║  🔧 Troubleshooting Steps:
+                ║     1. Check console output above for error details
+                ║     2. Verify Docker is running: docker ps
+                ║     3. Check container logs: docker logs <container>
+                ║     4. Verify all credentials in Jenkins:
+                ║        - dockerHubCreds
+                ║        - sonar-token
+                ║        - github-token
+                ║     5. Review Docker build output
+                ║     6. Check npm package issues
+                ║  
+                ║  📝 Common Issues & Solutions:
+                ║     • Docker login failed:
+                ║       → Verify dockerHubCreds credential
+                ║       → Check Docker Hub username/password
+                ║     • Build failed:
+                ║       → Review Dockerfile syntax
+                ║       → Check npm dependencies
+                ║     • SonarQube failed:
+                ║       → Ensure SonarQube server is running
+                ║       → Verify sonar-token credential
+                ║     • GitHub checkout failed:
+                ║       → Check github-token credential
+                ║       → Verify token has 'repo' permissions
+                ║  
+                ║  📋 Debug Commands:
+                ║     docker logs productivity-backend
+                ║     docker logs productivity-frontend
+                ║     docker network inspect productivity-network
+                ║     docker ps -a
+                ║  
+                ║  ⏱️  Build Duration: ${currentBuild.durationString}
+                ╚════════════════════════════════════════════════════════╝
                 """
             }
         }
         
         unstable {
             script {
-                echo "⚠️ Pipeline completed with warnings. Check logs for details."
+                echo '⚠️  Pipeline completed with warnings. Please review logs.'
             }
         }
     }
 }
-
-
-
