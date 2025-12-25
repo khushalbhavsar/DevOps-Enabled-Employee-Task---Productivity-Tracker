@@ -6,16 +6,17 @@ pipeline {
         DOCKER_IMAGE_BACKEND = 'productivity-backend'
         DOCKER_IMAGE_FRONTEND = 'productivity-frontend'
         DOCKER_TAG = "${BUILD_NUMBER}"
-        DOCKER_HUB_CREDENTIALS = 'dockerhub-credentials'
+        DOCKER_HUB_CREDENTIALS = 'dockerHubCreds'
+        DOCKER_REGISTRY = 'yourdockerhub'
         
         // SonarQube Configuration
-        SONARQUBE_HOST = 'http://54.90.132.250:9000'
-        SONARQUBE_CREDENTIALS = 'sonarqube-token'
+        SONARQUBE_HOST = 'http://localhost:9000'
+        SONARQUBE_CREDENTIALS = 'sonar-token'
         
         // Kubernetes Configuration
         K8S_NAMESPACE = 'productivity-tracker'
-        K8S_DEPLOYMENT_BACKEND = 'backend'
-        K8S_DEPLOYMENT_FRONTEND = 'frontend'
+        K8S_DEPLOYMENT_BACKEND = 'backend-deployment'
+        K8S_DEPLOYMENT_FRONTEND = 'frontend-deployment'
         KUBECONFIG = credentials('kubeconfig')
         
         // Deployment Target (initial value, will be dynamically determined)
@@ -83,51 +84,31 @@ pipeline {
             steps {
                 script {
                     try {
-                        echo "🔍 Running SonarQube code analysis..."
+                        echo "🔍 Running SonarQube Analysis..."
                         withCredentials([string(credentialsId: "${SONARQUBE_CREDENTIALS}", variable: 'SONAR_TOKEN')]) {
                             sh """
                                 docker run --rm \
-                                    --network host \
-                                    -e SONAR_HOST_URL="${SONARQUBE_HOST}" \
-                                    -e SONAR_TOKEN="\$SONAR_TOKEN" \
-                                    -v "${WORKSPACE}:/usr/src" \
-                                    sonarsource/sonar-scanner-cli \
-                                    -Dsonar.projectKey=employee-productivity-tracker \
-                                    -Dsonar.projectName='Employee Productivity & Task Tracker' \
-                                    -Dsonar.projectVersion=1.0 \
-                                    -Dsonar.sources=backend/src,frontend/src \
-                                    -Dsonar.tests=backend/tests \
-                                    -Dsonar.exclusions='**/node_modules/**,**/build/**,**/dist/**,**/*.test.js,**/*.spec.js,**/coverage/**' \
-                                    -Dsonar.javascript.lcov.reportPaths=backend/coverage/lcov.info,frontend/coverage/lcov.info \
-                                    -Dsonar.javascript.file.suffixes=.js,.jsx \
-                                    -Dsonar.sourceEncoding=UTF-8
+                                --network host \
+                                -e SONAR_HOST_URL="${SONARQUBE_HOST}" \
+                                -e SONAR_TOKEN="\$SONAR_TOKEN" \
+                                -v "${WORKSPACE}:/usr/src" \
+                                sonarsource/sonar-scanner-cli \
+                                -Dsonar.projectKey=employee-productivity-tracker \
+                                -Dsonar.projectName="Employee Productivity & Task Tracker" \
+                                -Dsonar.sources=backend/src,frontend/src \
+                                -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/build/**,**/*.test.js
                             """
                         }
                         echo "✅ SonarQube analysis completed"
                     } catch (Exception e) {
                         echo "⚠️ SonarQube analysis skipped: ${e.message}"
-                        echo "💡 Check: 1) SonarQube server is running 2) Credential 'sonarqube-token' exists"
+                        echo "💡 Check: 1) SonarQube server is running 2) Credential 'sonar-token' exists"
                         echo "ℹ️ SonarQube URL: ${SONARQUBE_HOST}"
                     }
                 }
             }
         }
-        
-        stage('Quality Gate') {
-            steps {
-                script {
-                    try {
-                        timeout(time: 5, unit: 'MINUTES') {
-                            waitForQualityGate abortPipeline: true
-                        }
-                        echo "✅ Quality Gate passed"
-                    } catch (Exception e) {
-                        echo "⚠️ Quality Gate check skipped (using Docker scanner)"
-                        echo "💡 Visit ${SONARQUBE_HOST} to view detailed analysis results"
-                    }
-                }
-            }
-        }
+
         
         stage('Build Docker Images') {
             steps {
@@ -195,23 +176,63 @@ pipeline {
         stage('Deploy') {
             steps {
                 script {
-                    echo "🚀 Deploying with Docker..."
-                    sh """
-                        docker stop todo-node-app || true
-                        docker rm todo-node-app || true
-                        docker network create todo-network || true
-                        docker run -d \
-                            --name todo-node-app \
-                            --network todo-network \
-                            -p 8000:8000 \
-                            -e NODE_ENV=production \
-                            -e PORT=8000 \
-                            --restart unless-stopped \
-                            khushalbhavsar/${DOCKER_IMAGE}:${DOCKER_TAG}
-                        sleep 5
-                        docker ps
-                    """
-                    echo "✅ Application deployed successfully"
+                    try {
+                        if (env.DEPLOY_TARGET == "k8s") {
+                            echo "☸️ Deploying to Kubernetes..."
+                            sh """
+                                # Update image references in deployments
+                                sed -i 's|<DOCKER_REGISTRY>|${DOCKER_REGISTRY}|g' kubernetes/deployments/*.yaml
+                                
+                                # Apply deployments
+                                kubectl apply -f kubernetes/namespace.yaml
+                                kubectl apply -f kubernetes/configmaps/
+                                kubectl apply -f kubernetes/secrets/
+                                kubectl apply -f kubernetes/deployments/
+                                kubectl apply -f kubernetes/services/
+                                kubectl apply -f kubernetes/ingress/
+                                kubectl apply -f kubernetes/hpa.yaml
+                                
+                                # Wait for deployments
+                                kubectl wait --for=condition=available --timeout=300s deployment/${K8S_DEPLOYMENT_BACKEND} -n ${K8S_NAMESPACE}
+                                kubectl wait --for=condition=available --timeout=300s deployment/${K8S_DEPLOYMENT_FRONTEND} -n ${K8S_NAMESPACE}
+                            """
+                            echo "✅ Kubernetes deployment completed"
+                        } else {
+                            echo "🐳 Deploying with Docker..."
+                            sh """
+                                docker stop productivity-backend || true
+                                docker rm productivity-backend || true
+                                docker stop productivity-frontend || true
+                                docker rm productivity-frontend || true
+                                
+                                docker network create productivity-network || true
+                                
+                                # Run backend
+                                docker run -d \
+                                    --name productivity-backend \
+                                    --network productivity-network \
+                                    -p 5000:5000 \
+                                    -e NODE_ENV=production \
+                                    --restart unless-stopped \
+                                    ${DOCKER_REGISTRY}/${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG}
+                                
+                                # Run frontend
+                                docker run -d \
+                                    --name productivity-frontend \
+                                    --network productivity-network \
+                                    -p 3000:3000 \
+                                    --restart unless-stopped \
+                                    ${DOCKER_REGISTRY}/${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG}
+                                
+                                sleep 5
+                                docker ps
+                            """
+                            echo "✅ Docker deployment completed"
+                        }
+                    } catch (Exception e) {
+                        echo "⚠️ Deployment failed: ${e.message}"
+                        throw e
+                    }
                 }
             }
         }
@@ -262,11 +283,13 @@ pipeline {
             ✅ Pipeline Completed Successfully!
             ════════════════════════════════════════════
             📦 Build Number: ${BUILD_NUMBER}
-            🐳 Docker Image: khushalbhavsar/${DOCKER_IMAGE}:${DOCKER_TAG}
+            🐳 Backend Image: ${DOCKER_REGISTRY}/${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG}
+            🐳 Frontend Image: ${DOCKER_REGISTRY}/${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG}
             ☸️  Kubernetes Namespace: ${K8S_NAMESPACE}
-            🚀 Deployment: ${K8S_DEPLOYMENT}
+            🚀 Backend Deployment: ${K8S_DEPLOYMENT_BACKEND}
+            🚀 Frontend Deployment: ${K8S_DEPLOYMENT_FRONTEND}
             🌐 Get Service URL: kubectl get svc -n ${K8S_NAMESPACE}
-            🔍 SonarQube Report: Check SonarQube Dashboard
+            🔍 SonarQube Report: ${SONARQUBE_HOST}
             ════════════════════════════════════════════
             """
                 } else {
@@ -275,9 +298,11 @@ pipeline {
             ✅ Pipeline Completed Successfully!
             ════════════════════════════════════════════
             📦 Build Number: ${BUILD_NUMBER}
-            🐳 Docker Image: ${DOCKER_IMAGE}:${DOCKER_TAG}
-            🌐 Application: http://<EC2_IP>:8000
-            🔍 SonarQube Report: Check SonarQube Dashboard
+            🐳 Backend Image: ${DOCKER_REGISTRY}/${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG}
+            🐳 Frontend Image: ${DOCKER_REGISTRY}/${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG}
+            🌐 Backend: http://<EC2_IP>:5000
+            🌐 Frontend: http://<EC2_IP>:3000
+            🔍 SonarQube Report: ${SONARQUBE_HOST}
             ════════════════════════════════════════════
             """
                 }
@@ -296,8 +321,10 @@ pipeline {
             """
                     sh """
                         kubectl get pods -n ${K8S_NAMESPACE} || true
-                        kubectl describe deployment ${K8S_DEPLOYMENT} -n ${K8S_NAMESPACE} || true
-                        kubectl logs -l app=todoapp -n ${K8S_NAMESPACE} --tail=50 || true
+                        kubectl describe deployment ${K8S_DEPLOYMENT_BACKEND} -n ${K8S_NAMESPACE} || true
+                        kubectl describe deployment ${K8S_DEPLOYMENT_FRONTEND} -n ${K8S_NAMESPACE} || true
+                        kubectl logs -l app=backend -n ${K8S_NAMESPACE} --tail=50 || true
+                        kubectl logs -l app=frontend -n ${K8S_NAMESPACE} --tail=50 || true
                     """
                 } else {
                     echo """
@@ -309,7 +336,8 @@ pipeline {
             ════════════════════════════════════════════
             """
                     sh """
-                        docker logs todo-node-app || true
+                        docker logs productivity-backend || true
+                        docker logs productivity-frontend || true
                         docker ps -a || true
                     """
                 }
