@@ -1,33 +1,38 @@
-FROM node:18-alpine as build
+# ---------- Build stage ----------
+FROM node:16-alpine AS build
 
 WORKDIR /app
 
 # Copy package files
-COPY package*.json ./
+COPY package.json package-lock.json ./
 
-# Install dependencies - use npm ci with force flag to handle conflicts
-RUN npm ci --legacy-peer-deps --force --no-fund 2>&1 || npm install --legacy-peer-deps --force --no-fund
+# Install dependencies (deterministic)
+RUN npm ci --legacy-peer-deps
 
-# Copy source code
+# Copy source
 COPY . .
 
-# Build application
-RUN CI=false npm run build
+# Build React app
+RUN npm run build
 
-# Production stage
+
+# ---------- Runtime stage ----------
 FROM nginx:alpine
+
+# Remove default nginx config
+RUN rm /etc/nginx/conf.d/default.conf
 
 # Copy custom nginx config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Copy build files
+# Copy build output
 COPY --from=build /app/build /usr/share/nginx/html
 
 # Expose port
 EXPOSE 80
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-  CMD wget --quiet --tries=1 --spider http://localhost/health || exit 1
+# Health check (HTML check – correct for frontend)
+HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
+  CMD wget -qO- http://localhost | grep -qi "<html" || exit 1
 
 CMD ["nginx", "-g", "daemon off;"]
