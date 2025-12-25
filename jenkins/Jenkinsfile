@@ -421,7 +421,7 @@ pipeline {
                         echo ""
                         echo "Checking backend health..."
                         for i in {1..30}; do
-                            if curl -s http://localhost:${BACKEND_PORT}/health 2>/dev/null | grep -q "ok\|running"; then
+                            if curl -s http://localhost:${BACKEND_PORT}/health 2>/dev/null | grep -qE "ok|running"; then
                                 echo "✅ Backend is healthy"
                                 break
                             fi
