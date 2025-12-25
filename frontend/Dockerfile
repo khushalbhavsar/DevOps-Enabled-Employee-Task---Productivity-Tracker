@@ -5,10 +5,8 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies with comprehensive conflict resolution
-RUN npm install --legacy-peer-deps --no-fund && \
-    npm install ajv-keywords@latest --save-dev --legacy-peer-deps && \
-    npm install ajv@latest --save-dev --legacy-peer-deps
+# Install dependencies - use npm ci with force flag to handle conflicts
+RUN npm ci --legacy-peer-deps --force --no-fund 2>&1 || npm install --legacy-peer-deps --force --no-fund
 
 # Copy source code
 COPY . .
