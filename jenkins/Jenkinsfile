@@ -17,10 +17,9 @@ pipeline {
         K8S_NAMESPACE = 'productivity-tracker'
         K8S_DEPLOYMENT_BACKEND = 'backend-deployment'
         K8S_DEPLOYMENT_FRONTEND = 'frontend-deployment'
-        KUBECONFIG = credentials('kubeconfig')
         
         // Deployment Target (initial value, will be dynamically determined)
-        DEPLOY_TARGET = 'k8s'
+        DEPLOY_TARGET = 'docker'
     }
     
     stages {
@@ -269,72 +268,43 @@ pipeline {
     
     post {
         always {
-            echo "🧹 Cleaning up..."
-            sh """
-                docker logout || true
-                docker image prune -f || true
-            """
+            script {
+                echo "🧹 Cleaning up..."
+                node {
+                    sh """
+                        docker logout || true
+                        docker image prune -f || true
+                    """
+                }
+            }
         }
         success {
             script {
-                if (env.DEPLOY_TARGET == "k8s") {
-                    echo """
-            ════════════════════════════════════════════
-            ✅ Pipeline Completed Successfully!
-            ════════════════════════════════════════════
-            📦 Build Number: ${BUILD_NUMBER}
-            🐳 Backend Image: ${DOCKER_REGISTRY}/${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG}
-            🐳 Frontend Image: ${DOCKER_REGISTRY}/${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG}
-            ☸️  Kubernetes Namespace: ${K8S_NAMESPACE}
-            🚀 Backend Deployment: ${K8S_DEPLOYMENT_BACKEND}
-            🚀 Frontend Deployment: ${K8S_DEPLOYMENT_FRONTEND}
-            🌐 Get Service URL: kubectl get svc -n ${K8S_NAMESPACE}
-            🔍 SonarQube Report: ${SONARQUBE_HOST}
-            ════════════════════════════════════════════
-            """
-                } else {
-                    echo """
-            ════════════════════════════════════════════
-            ✅ Pipeline Completed Successfully!
-            ════════════════════════════════════════════
-            📦 Build Number: ${BUILD_NUMBER}
-            🐳 Backend Image: ${DOCKER_REGISTRY}/${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG}
-            🐳 Frontend Image: ${DOCKER_REGISTRY}/${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG}
-            🌐 Backend: http://<EC2_IP>:5000
-            🌐 Frontend: http://<EC2_IP>:3000
-            🔍 SonarQube Report: ${SONARQUBE_HOST}
-            ════════════════════════════════════════════
-            """
-                }
+                echo """
+        ════════════════════════════════════════════
+        ✅ Pipeline Completed Successfully!
+        ════════════════════════════════════════════
+        📦 Build Number: ${BUILD_NUMBER}
+        🐳 Backend Image: ${DOCKER_REGISTRY}/${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG}
+        🐳 Frontend Image: ${DOCKER_REGISTRY}/${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG}
+        🌐 Backend: http://<EC2_IP>:5000
+        🌐 Frontend: http://<EC2_IP>:3000
+        🔍 SonarQube Report: ${SONARQUBE_HOST}
+        ════════════════════════════════════════════
+        """
             }
         }
         failure {
             script {
-                if (env.DEPLOY_TARGET == "k8s") {
-                    echo """
-            ════════════════════════════════════════════
-            ❌ Pipeline Failed!
-            ════════════════════════════════════════════
-            📋 Check logs above for details
-            🔍 Build Number: ${BUILD_NUMBER}
-            ════════════════════════════════════════════
-            """
-                    sh """
-                        kubectl get pods -n ${K8S_NAMESPACE} || true
-                        kubectl describe deployment ${K8S_DEPLOYMENT_BACKEND} -n ${K8S_NAMESPACE} || true
-                        kubectl describe deployment ${K8S_DEPLOYMENT_FRONTEND} -n ${K8S_NAMESPACE} || true
-                        kubectl logs -l app=backend -n ${K8S_NAMESPACE} --tail=50 || true
-                        kubectl logs -l app=frontend -n ${K8S_NAMESPACE} --tail=50 || true
-                    """
-                } else {
-                    echo """
-            ════════════════════════════════════════════
-            ❌ Pipeline Failed!
-            ════════════════════════════════════════════
-            📋 Check logs above for details
-            🔍 Build Number: ${BUILD_NUMBER}
-            ════════════════════════════════════════════
-            """
+                echo """
+        ════════════════════════════════════════════
+        ❌ Pipeline Failed!
+        ════════════════════════════════════════════
+        📋 Check logs above for details
+        🔍 Build Number: ${BUILD_NUMBER}
+        ════════════════════════════════════════════
+        """
+                node {
                     sh """
                         docker logs productivity-backend || true
                         docker logs productivity-frontend || true
