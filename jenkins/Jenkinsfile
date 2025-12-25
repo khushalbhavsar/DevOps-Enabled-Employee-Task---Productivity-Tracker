@@ -1,6 +1,36 @@
 pipeline {
     agent any
     
+    tools {
+        nodejs 'node18'
+    }
+
+    stages {
+
+        stage('Install Dependencies') {
+            parallel {
+                stage('Backend Dependencies') {
+                    steps {
+                        dir('backend') {
+                            sh 'node -v'
+                            sh 'npm -v'
+                            sh 'npm ci'
+                        }
+                    }
+                }
+                stage('Frontend Dependencies') {
+                    steps {
+                        dir('frontend') {
+                            sh 'node -v'
+                            sh 'npm -v'
+                            sh 'npm ci'
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     environment {
         // Docker Configuration
         DOCKER_IMAGE_BACKEND = 'productivity-backend'
