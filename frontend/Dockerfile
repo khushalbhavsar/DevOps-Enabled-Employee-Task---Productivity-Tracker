@@ -38,7 +38,7 @@ RUN test -d /app/build || (echo "Build failed: /app/build not found" && exit 1)
 
 
 # -------- Stage 3: Production --------
-FROM nginx:alpine
+FROM nginx:alpine AS production
 
 LABEL maintainer="DevOps Team" \
       description="Production-ready Employee Productivity Tracker Frontend"
