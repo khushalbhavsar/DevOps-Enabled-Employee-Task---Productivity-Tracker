@@ -26,23 +26,49 @@ pipeline {
         stage('System Dependencies') {
             steps {
                 script {
-                    echo "📦 Installing system dependencies..."
-                    sh """
-                        # Update system packages
-                        sudo yum update -y || sudo apt-get update -y
-                        
-                        # Install required libraries for Node.js
-                        sudo yum install -y gcc-c++ make libatomic || sudo apt-get install -y build-essential libatomic1
-                        
-                        # Install Node.js if not present
-                        if ! command -v node &> /dev/null; then
-                            curl -fsSL https://rpm.nodesource.com/setup_18.x | sudo bash - || true
-                            sudo yum install -y nodejs || sudo apt-get install -y nodejs npm
+                    echo "📦 Checking system dependencies..."
+                    sh '''
+                        # Check if Node.js is installed
+                        if command -v node &> /dev/null; then
+                            echo "✅ Node.js is already installed"
+                            node -v
+                        else
+                            echo "⚠️ Node.js not found, attempting to install..."
+                            if [ -f /etc/os-release ]; then
+                                . /etc/os-release
+                                if [ "$ID" = "amzn" ] || [ "$ID" = "rhel" ] || [ "$ID" = "centos" ]; then
+                                    echo "📦 Installing Node.js on Amazon Linux/RHEL..."
+                                    sudo yum install -y nodejs npm 2>/dev/null || echo "ℹ️ NodeJS installation requires sudo privileges"
+                                elif [ "$ID" = "ubuntu" ] || [ "$ID" = "debian" ]; then
+                                    echo "📦 Installing Node.js on Ubuntu/Debian..."
+                                    sudo apt-get update -y 2>/dev/null && sudo apt-get install -y nodejs npm 2>/dev/null || echo "ℹ️ NodeJS installation requires sudo privileges"
+                                fi
+                            fi
                         fi
                         
-                        node -v
-                        npm -v
-                    """
+                        # Check if npm is installed
+                        if command -v npm &> /dev/null; then
+                            echo "✅ npm is already installed"
+                            npm -v
+                        fi
+                        
+                        # Check for required libraries
+                        if ldd /usr/bin/node 2>/dev/null | grep -q libatomic; then
+                            echo "✅ libatomic.so.1 is available"
+                        else
+                            echo "⚠️ Installing required system libraries..."
+                            if [ -f /etc/os-release ]; then
+                                . /etc/os-release
+                                if [ "$ID" = "amzn" ] || [ "$ID" = "rhel" ] || [ "$ID" = "centos" ]; then
+                                    sudo yum install -y libatomic gcc-c++ make 2>/dev/null || echo "ℹ️ Library installation requires sudo privileges"
+                                elif [ "$ID" = "ubuntu" ] || [ "$ID" = "debian" ]; then
+                                    sudo apt-get install -y libatomic1 build-essential 2>/dev/null || echo "ℹ️ Library installation requires sudo privileges"
+                                fi
+                            fi
+                        fi
+                        
+                        echo "✅ Dependency check completed"
+                    '''
                 }
             }
         }
