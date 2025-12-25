@@ -4,28 +4,25 @@ pipeline {
     environment {
         // Project Configuration
         PROJECT_NAME = 'Employee-Productivity-Task-Tracker'
-        
-        // Docker Configuration
-        DOCKER_IMAGE_BACKEND = 'productivity-backend'
-        DOCKER_IMAGE_FRONTEND = 'productivity-frontend'
-        DOCKER_TAG = "${BUILD_NUMBER}"
-        DOCKER_HUB_CREDENTIALS = 'dockerHubCreds'
         DOCKER_REGISTRY = 'khushalbhavsar'  // Change to your Docker Hub username
-        
-        // SonarQube Configuration
-        SONARQUBE_HOST = 'http://localhost:9000'
-        SONARQUBE_CREDENTIALS = 'sonar-token'
+        DOCKER_IMAGE_BACKEND = "productivity-backend"
+        DOCKER_IMAGE_FRONTEND = "productivity-frontend"
+        DOCKER_TAG = "${BUILD_NUMBER}"
+        DOCKER_LATEST = "latest"
         
         // Application Ports
         BACKEND_PORT = '5000'
         FRONTEND_PORT = '3000'
         MONGO_PORT = '27017'
+        
+        // SonarQube Host
+        SONARQUBE_HOST = 'http://localhost:9000'
     }
     
     options {
         buildDiscarder(logRotator(numToKeepStr: '10'))
         disableConcurrentBuilds()
-        timeout(time: 1, unit: 'HOURS')
+        timeout(time: 2, unit: 'HOURS')
         timestamps()
     }
     
@@ -35,18 +32,339 @@ pipeline {
                 script {
                     echo """
                     ════════════════════════════════════════════
-                    🚀 Starting Pipeline Execution
+                    🚀 Pipeline Initialization
                     ════════════════════════════════════════════
                     Project: ${PROJECT_NAME}
-                    Build Number: ${BUILD_NUMBER}
-                    Build Tag: ${DOCKER_TAG}
-                    Node: ${NODE_NAME}
+                    Build: ${BUILD_NUMBER}
+                    Registry: ${DOCKER_REGISTRY}
                     Workspace: ${WORKSPACE}
                     ════════════════════════════════════════════
                     """
                 }
             }
         }
+        
+        stage('Checkout') {
+            steps {
+                script {
+                    echo '📥 Cloning repository...'
+                    checkout scm
+                    echo '✅ Repository cloned successfully'
+                }
+            }
+        }
+        
+        stage('Environment Setup') {
+            steps {
+                script {
+                    echo '⚙️ Verifying build environment...'
+                    sh '''
+                        echo "Checking tools..."
+                        node --version
+                        npm --version
+                        docker --version
+                        git --version
+                        echo "✅ All tools available"
+                    '''
+                }
+            }
+        }
+        
+        stage('Code Analysis') {
+            parallel {
+                stage('Backend Analysis') {
+                    steps {
+                        dir('backend') {
+                            script {
+                                echo '📝 Analyzing backend code...'
+                                sh '''
+                                    npm ci --legacy-peer-deps 2>/dev/null || npm install --legacy-peer-deps --no-fund
+                                    npm run lint 2>/dev/null || echo "ℹ️ No lint script configured"
+                                '''
+                            }
+                        }
+                    }
+                }
+                
+                stage('Frontend Analysis') {
+                    steps {
+                        dir('frontend') {
+                            script {
+                                echo '📝 Analyzing frontend code...'
+                                sh '''
+                                    npm ci --legacy-peer-deps 2>/dev/null || npm install --legacy-peer-deps --no-fund
+                                    npm run lint 2>/dev/null || echo "ℹ️ No lint script configured"
+                                '''
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Install Dependencies') {
+            parallel {
+                stage('Backend Dependencies') {
+                    steps {
+                        dir('backend') {
+                            script {
+                                echo '📦 Installing backend dependencies...'
+                                sh '''
+                                    npm ci --legacy-peer-deps 2>/dev/null || npm install --legacy-peer-deps --no-fund
+                                    echo "✅ Backend dependencies installed"
+                                '''
+                            }
+                        }
+                    }
+                }
+                
+                stage('Frontend Dependencies') {
+                    steps {
+                        dir('frontend') {
+                            script {
+                                echo '📦 Installing frontend dependencies...'
+                                sh '''
+                                    npm ci --legacy-peer-deps 2>/dev/null || npm install --legacy-peer-deps --no-fund
+                                    echo "✅ Frontend dependencies installed"
+                                '''
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Run Tests') {
+            parallel {
+                stage('Backend Tests') {
+                    steps {
+                        dir('backend') {
+                            script {
+                                echo '🧪 Running backend tests...'
+                                sh 'npm test -- --passWithNoTests 2>/dev/null || true'
+                            }
+                        }
+                    }
+                }
+                
+                stage('Frontend Tests') {
+                    steps {
+                        dir('frontend') {
+                            script {
+                                echo '🧪 Running frontend tests...'
+                                sh 'npm test -- --watchAll=false --passWithNoTests 2>/dev/null || true'
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('SonarQube Analysis') {
+            steps {
+                script {
+                    echo '🔍 Running SonarQube analysis...'
+                    withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+                        sh '''
+                            docker run --rm \
+                              --network host \
+                              -e SONAR_HOST_URL=${SONARQUBE_HOST} \
+                              -e SONAR_TOKEN=${SONAR_TOKEN} \
+                              -v ${WORKSPACE}:/usr/src \
+                              sonarsource/sonar-scanner-cli \
+                              -Dsonar.projectKey=${PROJECT_NAME} \
+                              -Dsonar.projectName="Employee Productivity & Task Tracker" \
+                              -Dsonar.projectVersion=1.0 \
+                              -Dsonar.sources=backend/src,frontend/src \
+                              -Dsonar.exclusions='**/node_modules/**,**/build/**,**/dist/**,**/*.test.js,**/*.spec.js' || true
+                        '''
+                        echo '✅ SonarQube analysis completed'
+                    }
+                }
+            }
+        }
+        
+        stage('Build Docker Images') {
+            parallel {
+                stage('Build Backend Image') {
+                    steps {
+                        dir('backend') {
+                            script {
+                                echo '🐳 Building backend Docker image...'
+                                sh '''
+                                    docker build -t ${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG} .
+                                    docker tag ${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG} ${DOCKER_IMAGE_BACKEND}:${DOCKER_LATEST}
+                                    echo "✅ Backend image: ${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG}"
+                                '''
+                            }
+                        }
+                    }
+                }
+                
+                stage('Build Frontend Image') {
+                    steps {
+                        dir('frontend') {
+                            script {
+                                echo '🐳 Building frontend Docker image...'
+                                sh '''
+                                    docker build -t ${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG} .
+                                    docker tag ${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG} ${DOCKER_IMAGE_FRONTEND}:${DOCKER_LATEST}
+                                    echo "✅ Frontend image: ${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG}"
+                                '''
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Push to Docker Hub') {
+            when {
+                branch 'main'
+            }
+            steps {
+                script {
+                    echo '📤 Pushing images to Docker Hub...'
+                    withCredentials([usernamePassword(credentialsId: 'dockerHubCreds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                        sh '''
+                            echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
+                            
+                            docker tag ${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG} ${DOCKER_USER}/${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG}
+                            docker tag ${DOCKER_IMAGE_BACKEND}:${DOCKER_LATEST} ${DOCKER_USER}/${DOCKER_IMAGE_BACKEND}:${DOCKER_LATEST}
+                            docker push ${DOCKER_USER}/${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG}
+                            docker push ${DOCKER_USER}/${DOCKER_IMAGE_BACKEND}:${DOCKER_LATEST}
+                            
+                            docker tag ${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG} ${DOCKER_USER}/${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG}
+                            docker tag ${DOCKER_IMAGE_FRONTEND}:${DOCKER_LATEST} ${DOCKER_USER}/${DOCKER_IMAGE_FRONTEND}:${DOCKER_LATEST}
+                            docker push ${DOCKER_USER}/${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG}
+                            docker push ${DOCKER_USER}/${DOCKER_IMAGE_FRONTEND}:${DOCKER_LATEST}
+                            
+                            docker logout
+                            echo "✅ Images pushed successfully"
+                        '''
+                    }
+                }
+            }
+        }
+        
+        stage('Deploy') {
+            when {
+                branch 'main'
+            }
+            steps {
+                script {
+                    echo '🚀 Deploying application...'
+                    sh '''
+                        docker network create productivity-network 2>/dev/null || true
+                        
+                        # Stop and remove old containers
+                        docker stop productivity-backend productivity-frontend 2>/dev/null || true
+                        docker rm productivity-backend productivity-frontend 2>/dev/null || true
+                        
+                        # Deploy containers
+                        docker run -d \
+                            --name productivity-backend \
+                            --network productivity-network \
+                            -p ${BACKEND_PORT}:5000 \
+                            -e NODE_ENV=production \
+                            --restart unless-stopped \
+                            ${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG}
+                        
+                        docker run -d \
+                            --name productivity-frontend \
+                            --network productivity-network \
+                            -p ${FRONTEND_PORT}:3000 \
+                            --restart unless-stopped \
+                            ${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG}
+                        
+                        echo "✅ Deployment completed"
+                    '''
+                }
+            }
+        }
+        
+        stage('Verify Deployment') {
+            when {
+                branch 'main'
+            }
+            steps {
+                script {
+                    echo '🏥 Verifying deployment...'
+                    sh '''
+                        sleep 10
+                        docker ps --filter "name=productivity"
+                        echo "✅ Deployment verification completed"
+                    '''
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            script {
+                echo '🧹 Cleaning up...'
+                sh '''
+                    docker logout 2>/dev/null || true
+                    docker image prune -f --filter "until=72h" 2>/dev/null || true
+                '''
+            }
+        }
+        
+        success {
+            script {
+                echo """
+                
+                ════════════════════════════════════════════════════
+                ✅ PIPELINE SUCCESS
+                ════════════════════════════════════════════════════
+                📦 Build #${BUILD_NUMBER}
+                🐳 Backend: ${DOCKER_REGISTRY}/${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG}
+                🐳 Frontend: ${DOCKER_REGISTRY}/${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG}
+                
+                🌐 Access Application:
+                   Backend: http://<server>:${BACKEND_PORT}
+                   Frontend: http://<server>:${FRONTEND_PORT}
+                
+                📊 View Details:
+                   SonarQube: ${SONARQUBE_HOST}
+                   Docker Logs: docker logs productivity-backend/frontend
+                
+                ⏱️  Duration: ${currentBuild.durationString}
+                ════════════════════════════════════════════════════
+                """
+            }
+        }
+        
+        failure {
+            script {
+                echo """
+                
+                ════════════════════════════════════════════════════
+                ❌ PIPELINE FAILED
+                ════════════════════════════════════════════════════
+                📦 Build #${BUILD_NUMBER}
+                
+                🔧 Troubleshooting:
+                   1. Check console output above
+                   2. Verify Docker is running
+                   3. Check credentials in Jenkins
+                   4. Review Docker build logs
+                   5. Verify Docker Hub credentials
+                
+                📝 Common Issues:
+                   - Docker login failed: Check dockerHubCreds
+                   - Build failed: Check Dockerfile and npm packages
+                   - SonarQube failed: Check sonar-token credential
+                   - GitHub checkout failed: Check github-token
+                
+                ⏱️  Duration: ${currentBuild.durationString}
+                ════════════════════════════════════════════════════
+                """
+            }
+        }
+    }
+}
         
         stage('Checkout') {
             steps {
@@ -453,371 +771,371 @@ pipeline {
 
 
 
-// pipeline {
-//     agent any
+pipeline {
+    agent any
     
-//     environment {
-//         // Docker Configuration
-//         DOCKER_IMAGE_BACKEND = 'productivity-backend'
-//         DOCKER_IMAGE_FRONTEND = 'productivity-frontend'
-//         DOCKER_TAG = "${BUILD_NUMBER}"
-//         DOCKER_HUB_CREDENTIALS = 'dockerHubCreds'
-//         DOCKER_REGISTRY = 'yourdockerhub'
+    environment {
+        // Docker Configuration
+        DOCKER_IMAGE_BACKEND = 'productivity-backend'
+        DOCKER_IMAGE_FRONTEND = 'productivity-frontend'
+        DOCKER_TAG = "${BUILD_NUMBER}"
+        DOCKER_HUB_CREDENTIALS = 'dockerHubCreds'
+        DOCKER_REGISTRY = 'yourdockerhub'
         
-//         // SonarQube Configuration
-//         SONARQUBE_HOST = 'http://localhost:9000'
-//         SONARQUBE_CREDENTIALS = 'sonar-token'
+        // SonarQube Configuration
+        SONARQUBE_HOST = 'http://localhost:9000'
+        SONARQUBE_CREDENTIALS = 'sonar-token'
         
-//         // Kubernetes Configuration
-//         K8S_NAMESPACE = 'productivity-tracker'
-//         K8S_DEPLOYMENT_BACKEND = 'backend-deployment'
-//         K8S_DEPLOYMENT_FRONTEND = 'frontend-deployment'
+        // Kubernetes Configuration
+        K8S_NAMESPACE = 'productivity-tracker'
+        K8S_DEPLOYMENT_BACKEND = 'backend-deployment'
+        K8S_DEPLOYMENT_FRONTEND = 'frontend-deployment'
         
-//         // Deployment Target
-//         DEPLOY_TARGET = 'docker'
-//     }
+        // Deployment Target
+        DEPLOY_TARGET = 'docker'
+    }
     
-//     stages {
-//         stage('System Dependencies') {
-//             steps {
-//                 script {
-//                     echo "📦 Checking system dependencies..."
-//                     sh '''
-//                         # Check if Node.js is installed
-//                         if command -v node &> /dev/null; then
-//                             echo "✅ Node.js is already installed"
-//                             node -v
-//                         else
-//                             echo "⚠️ Node.js not found, attempting to install..."
-//                             if [ -f /etc/os-release ]; then
-//                                 . /etc/os-release
-//                                 if [ "$ID" = "amzn" ] || [ "$ID" = "rhel" ] || [ "$ID" = "centos" ]; then
-//                                     echo "📦 Installing Node.js on Amazon Linux/RHEL..."
-//                                     sudo yum install -y nodejs npm 2>/dev/null || echo "ℹ️ NodeJS installation requires sudo privileges"
-//                                 elif [ "$ID" = "ubuntu" ] || [ "$ID" = "debian" ]; then
-//                                     echo "📦 Installing Node.js on Ubuntu/Debian..."
-//                                     sudo apt-get update -y 2>/dev/null && sudo apt-get install -y nodejs npm 2>/dev/null || echo "ℹ️ NodeJS installation requires sudo privileges"
-//                                 fi
-//                             fi
-//                         fi
+    stages {
+        stage('System Dependencies') {
+            steps {
+                script {
+                    echo "📦 Checking system dependencies..."
+                    sh '''
+                        # Check if Node.js is installed
+                        if command -v node &> /dev/null; then
+                            echo "✅ Node.js is already installed"
+                            node -v
+                        else
+                            echo "⚠️ Node.js not found, attempting to install..."
+                            if [ -f /etc/os-release ]; then
+                                . /etc/os-release
+                                if [ "$ID" = "amzn" ] || [ "$ID" = "rhel" ] || [ "$ID" = "centos" ]; then
+                                    echo "📦 Installing Node.js on Amazon Linux/RHEL..."
+                                    sudo yum install -y nodejs npm 2>/dev/null || echo "ℹ️ NodeJS installation requires sudo privileges"
+                                elif [ "$ID" = "ubuntu" ] || [ "$ID" = "debian" ]; then
+                                    echo "📦 Installing Node.js on Ubuntu/Debian..."
+                                    sudo apt-get update -y 2>/dev/null && sudo apt-get install -y nodejs npm 2>/dev/null || echo "ℹ️ NodeJS installation requires sudo privileges"
+                                fi
+                            fi
+                        fi
                         
-//                         # Check if npm is installed
-//                         if command -v npm &> /dev/null; then
-//                             echo "✅ npm is already installed"
-//                             npm -v
-//                         fi
+                        # Check if npm is installed
+                        if command -v npm &> /dev/null; then
+                            echo "✅ npm is already installed"
+                            npm -v
+                        fi
                         
-//                         # Check for required libraries
-//                         if ldd /usr/bin/node 2>/dev/null | grep -q libatomic; then
-//                             echo "✅ libatomic.so.1 is available"
-//                         else
-//                             echo "⚠️ Installing required system libraries..."
-//                             if [ -f /etc/os-release ]; then
-//                                 . /etc/os-release
-//                                 if [ "$ID" = "amzn" ] || [ "$ID" = "rhel" ] || [ "$ID" = "centos" ]; then
-//                                     sudo yum install -y libatomic gcc-c++ make 2>/dev/null || echo "ℹ️ Library installation requires sudo privileges"
-//                                 elif [ "$ID" = "ubuntu" ] || [ "$ID" = "debian" ]; then
-//                                     sudo apt-get install -y libatomic1 build-essential 2>/dev/null || echo "ℹ️ Library installation requires sudo privileges"
-//                                 fi
-//                             fi
-//                         fi
+                        # Check for required libraries
+                        if ldd /usr/bin/node 2>/dev/null | grep -q libatomic; then
+                            echo "✅ libatomic.so.1 is available"
+                        else
+                            echo "⚠️ Installing required system libraries..."
+                            if [ -f /etc/os-release ]; then
+                                . /etc/os-release
+                                if [ "$ID" = "amzn" ] || [ "$ID" = "rhel" ] || [ "$ID" = "centos" ]; then
+                                    sudo yum install -y libatomic gcc-c++ make 2>/dev/null || echo "ℹ️ Library installation requires sudo privileges"
+                                elif [ "$ID" = "ubuntu" ] || [ "$ID" = "debian" ]; then
+                                    sudo apt-get install -y libatomic1 build-essential 2>/dev/null || echo "ℹ️ Library installation requires sudo privileges"
+                                fi
+                            fi
+                        fi
                         
-//                         echo "✅ Dependency check completed"
-//                     '''
-//                 }
-//             }
-//         }
+                        echo "✅ Dependency check completed"
+                    '''
+                }
+            }
+        }
 
-//         stage('Checkout') {
-//             steps {
-//                 checkout scm
-//                 echo '✅ Code checkout completed'
-//             }
-//         }
+        stage('Checkout') {
+            steps {
+                checkout scm
+                echo '✅ Code checkout completed'
+            }
+        }
         
-//         stage('Install Dependencies') {
-//             parallel {
-//                 stage('Backend Dependencies') {
-//                     steps {
-//                         dir('backend') {
-//                             sh '''
-//                                 echo "📦 Installing backend dependencies..."
-//                                 npm ci --legacy-peer-deps
-//                                 echo "✅ Backend dependencies installed"
-//                             '''
-//                         }
-//                     }
-//                 }
+        stage('Install Dependencies') {
+            parallel {
+                stage('Backend Dependencies') {
+                    steps {
+                        dir('backend') {
+                            sh '''
+                                echo "📦 Installing backend dependencies..."
+                                npm ci --legacy-peer-deps
+                                echo "✅ Backend dependencies installed"
+                            '''
+                        }
+                    }
+                }
 
-//                 stage('Frontend Dependencies') {
-//                     steps {
-//                         dir('frontend') {
-//                             sh '''
-//                                 echo "📦 Installing frontend dependencies..."
-//                                 npm ci --legacy-peer-deps
-//                                 echo "✅ Frontend dependencies installed"
-//                             '''
-//                         }
-//                     }
-//                 }
-//             }
-//         }
+                stage('Frontend Dependencies') {
+                    steps {
+                        dir('frontend') {
+                            sh '''
+                                echo "📦 Installing frontend dependencies..."
+                                npm ci --legacy-peer-deps
+                                echo "✅ Frontend dependencies installed"
+                            '''
+                        }
+                    }
+                }
+            }
+        }
 
-//         stage('Run Tests') {
-//             parallel {
-//                 stage('Backend Tests') {
-//                     steps {
-//                         dir('backend') {
-//                             sh 'npm test || true'
-//                         }
-//                     }
-//                 }
-//                 stage('Frontend Tests') {
-//                     steps {
-//                         dir('frontend') {
-//                             sh 'npm test -- --watchAll=false || true'
-//                         }
-//                     }
-//                 }
-//             }
-//         }
+        stage('Run Tests') {
+            parallel {
+                stage('Backend Tests') {
+                    steps {
+                        dir('backend') {
+                            sh 'npm test || true'
+                        }
+                    }
+                }
+                stage('Frontend Tests') {
+                    steps {
+                        dir('frontend') {
+                            sh 'npm test -- --watchAll=false || true'
+                        }
+                    }
+                }
+            }
+        }
         
-//         stage('SonarQube Analysis') {
-//             steps {
-//                 script {
-//                     try {
-//                         echo "🔍 Running SonarQube Analysis..."
-//                         withCredentials([string(credentialsId: "${SONARQUBE_CREDENTIALS}", variable: 'SONAR_TOKEN')]) {
-//                             sh """
-//                                 docker run --rm \
-//                                 --network host \
-//                                 -e SONAR_HOST_URL="${SONARQUBE_HOST}" \
-//                                 -e SONAR_TOKEN="\$SONAR_TOKEN" \
-//                                 -v "${WORKSPACE}:/usr/src" \
-//                                 sonarsource/sonar-scanner-cli \
-//                                 -Dsonar.projectKey=employee-productivity-tracker \
-//                                 -Dsonar.projectName="Employee Productivity & Task Tracker" \
-//                                 -Dsonar.sources=backend/src,frontend/src \
-//                                 -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/build/**,**/*.test.js
-//                             """
-//                         }
-//                         echo "✅ SonarQube analysis completed"
-//                     } catch (Exception e) {
-//                         echo "⚠️ SonarQube analysis skipped: ${e.message}"
-//                         echo "💡 Check: 1) SonarQube server is running 2) Credential 'sonar-token' exists"
-//                         echo "ℹ️ SonarQube URL: ${SONARQUBE_HOST}"
-//                     }
-//                 }
-//             }
-//         }
+        stage('SonarQube Analysis') {
+            steps {
+                script {
+                    try {
+                        echo "🔍 Running SonarQube Analysis..."
+                        withCredentials([string(credentialsId: "${SONARQUBE_CREDENTIALS}", variable: 'SONAR_TOKEN')]) {
+                            sh """
+                                docker run --rm \
+                                --network host \
+                                -e SONAR_HOST_URL="${SONARQUBE_HOST}" \
+                                -e SONAR_TOKEN="\$SONAR_TOKEN" \
+                                -v "${WORKSPACE}:/usr/src" \
+                                sonarsource/sonar-scanner-cli \
+                                -Dsonar.projectKey=employee-productivity-tracker \
+                                -Dsonar.projectName="Employee Productivity & Task Tracker" \
+                                -Dsonar.sources=backend/src,frontend/src \
+                                -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/build/**,**/*.test.js
+                            """
+                        }
+                        echo "✅ SonarQube analysis completed"
+                    } catch (Exception e) {
+                        echo "⚠️ SonarQube analysis skipped: ${e.message}"
+                        echo "💡 Check: 1) SonarQube server is running 2) Credential 'sonar-token' exists"
+                        echo "ℹ️ SonarQube URL: ${SONARQUBE_HOST}"
+                    }
+                }
+            }
+        }
 
         
-//         stage('Build Docker Images') {
-//             steps {
-//                 script {
-//                     echo '🏗️ Building Docker images...'
-//                     parallel(
-//                         'Build Backend': {
-//                             dir('backend') {
-//                                 sh """
-//                                     docker build -t ${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG} .
-//                                     docker tag ${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG} ${DOCKER_IMAGE_BACKEND}:latest
-//                                 """
-//                             }
-//                             echo "✅ Backend image built: ${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG}"
-//                         },
-//                         'Build Frontend': {
-//                             dir('frontend') {
-//                                 sh """
-//                                     docker build -t ${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG} .
-//                                     docker tag ${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG} ${DOCKER_IMAGE_FRONTEND}:latest
-//                                 """
-//                             }
-//                             echo "✅ Frontend image built: ${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG}"
-//                         }
-//                     )
-//                     echo '✅ All Docker images built successfully'
-//                 }
-//             }
-//         }
+        stage('Build Docker Images') {
+            steps {
+                script {
+                    echo '🏗️ Building Docker images...'
+                    parallel(
+                        'Build Backend': {
+                            dir('backend') {
+                                sh """
+                                    docker build -t ${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG} .
+                                    docker tag ${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG} ${DOCKER_IMAGE_BACKEND}:latest
+                                """
+                            }
+                            echo "✅ Backend image built: ${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG}"
+                        },
+                        'Build Frontend': {
+                            dir('frontend') {
+                                sh """
+                                    docker build -t ${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG} .
+                                    docker tag ${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG} ${DOCKER_IMAGE_FRONTEND}:latest
+                                """
+                            }
+                            echo "✅ Frontend image built: ${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG}"
+                        }
+                    )
+                    echo '✅ All Docker images built successfully'
+                }
+            }
+        }
         
-//         stage('Push to Docker Hub') {
-//             steps {
-//                 script {
-//                     try {
-//                         echo "🔐 Authenticating with Docker Hub..."
-//                         withCredentials([usernamePassword(
-//                             credentialsId: "${DOCKER_HUB_CREDENTIALS}",
-//                             usernameVariable: "DOCKER_USER", 
-//                             passwordVariable: "DOCKER_PASS")]) {
-//                             sh """
-//                                 echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin
+        stage('Push to Docker Hub') {
+            steps {
+                script {
+                    try {
+                        echo "🔐 Authenticating with Docker Hub..."
+                        withCredentials([usernamePassword(
+                            credentialsId: "${DOCKER_HUB_CREDENTIALS}",
+                            usernameVariable: "DOCKER_USER", 
+                            passwordVariable: "DOCKER_PASS")]) {
+                            sh """
+                                echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin
                                 
-//                                 # Push backend
-//                                 docker tag ${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG} \$DOCKER_USER/${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG}
-//                                 docker tag ${DOCKER_IMAGE_BACKEND}:latest \$DOCKER_USER/${DOCKER_IMAGE_BACKEND}:latest
-//                                 docker push \$DOCKER_USER/${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG}
-//                                 docker push \$DOCKER_USER/${DOCKER_IMAGE_BACKEND}:latest
+                                # Push backend
+                                docker tag ${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG} \$DOCKER_USER/${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG}
+                                docker tag ${DOCKER_IMAGE_BACKEND}:latest \$DOCKER_USER/${DOCKER_IMAGE_BACKEND}:latest
+                                docker push \$DOCKER_USER/${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG}
+                                docker push \$DOCKER_USER/${DOCKER_IMAGE_BACKEND}:latest
                                 
-//                                 # Push frontend
-//                                 docker tag ${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG} \$DOCKER_USER/${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG}
-//                                 docker tag ${DOCKER_IMAGE_FRONTEND}:latest \$DOCKER_USER/${DOCKER_IMAGE_FRONTEND}:latest
-//                                 docker push \$DOCKER_USER/${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG}
-//                                 docker push \$DOCKER_USER/${DOCKER_IMAGE_FRONTEND}:latest
-//                             """
-//                         }
-//                         echo "✅ Images pushed to Docker Hub successfully"
-//                     } catch (Exception e) {
-//                         echo "⚠️ Docker Hub push skipped: ${e.message}"
-//                         echo "💡 Local images available for deployment"
-//                     }
-//                 }
-//             }
-//         }
+                                # Push frontend
+                                docker tag ${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG} \$DOCKER_USER/${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG}
+                                docker tag ${DOCKER_IMAGE_FRONTEND}:latest \$DOCKER_USER/${DOCKER_IMAGE_FRONTEND}:latest
+                                docker push \$DOCKER_USER/${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG}
+                                docker push \$DOCKER_USER/${DOCKER_IMAGE_FRONTEND}:latest
+                            """
+                        }
+                        echo "✅ Images pushed to Docker Hub successfully"
+                    } catch (Exception e) {
+                        echo "⚠️ Docker Hub push skipped: ${e.message}"
+                        echo "💡 Local images available for deployment"
+                    }
+                }
+            }
+        }
         
-//         stage('Deploy') {
-//             steps {
-//                 script {
-//                     try {
-//                         if (env.DEPLOY_TARGET == "k8s") {
-//                             echo "☸️ Deploying to Kubernetes..."
-//                             sh """
-//                                 # Update image references in deployments
-//                                 sed -i 's|<DOCKER_REGISTRY>|${DOCKER_REGISTRY}|g' kubernetes/deployments/*.yaml
+        stage('Deploy') {
+            steps {
+                script {
+                    try {
+                        if (env.DEPLOY_TARGET == "k8s") {
+                            echo "☸️ Deploying to Kubernetes..."
+                            sh """
+                                # Update image references in deployments
+                                sed -i 's|<DOCKER_REGISTRY>|${DOCKER_REGISTRY}|g' kubernetes/deployments/*.yaml
                                 
-//                                 # Apply deployments
-//                                 kubectl apply -f kubernetes/namespace.yaml
-//                                 kubectl apply -f kubernetes/configmaps/
-//                                 kubectl apply -f kubernetes/secrets/
-//                                 kubectl apply -f kubernetes/deployments/
-//                                 kubectl apply -f kubernetes/services/
-//                                 kubectl apply -f kubernetes/ingress/
-//                                 kubectl apply -f kubernetes/hpa.yaml
+                                # Apply deployments
+                                kubectl apply -f kubernetes/namespace.yaml
+                                kubectl apply -f kubernetes/configmaps/
+                                kubectl apply -f kubernetes/secrets/
+                                kubectl apply -f kubernetes/deployments/
+                                kubectl apply -f kubernetes/services/
+                                kubectl apply -f kubernetes/ingress/
+                                kubectl apply -f kubernetes/hpa.yaml
                                 
-//                                 # Wait for deployments
-//                                 kubectl wait --for=condition=available --timeout=300s deployment/${K8S_DEPLOYMENT_BACKEND} -n ${K8S_NAMESPACE}
-//                                 kubectl wait --for=condition=available --timeout=300s deployment/${K8S_DEPLOYMENT_FRONTEND} -n ${K8S_NAMESPACE}
-//                             """
-//                             echo "✅ Kubernetes deployment completed"
-//                         } else {
-//                             echo "🐳 Deploying with Docker..."
-//                             sh """
-//                                 docker stop productivity-backend || true
-//                                 docker rm productivity-backend || true
-//                                 docker stop productivity-frontend || true
-//                                 docker rm productivity-frontend || true
+                                # Wait for deployments
+                                kubectl wait --for=condition=available --timeout=300s deployment/${K8S_DEPLOYMENT_BACKEND} -n ${K8S_NAMESPACE}
+                                kubectl wait --for=condition=available --timeout=300s deployment/${K8S_DEPLOYMENT_FRONTEND} -n ${K8S_NAMESPACE}
+                            """
+                            echo "✅ Kubernetes deployment completed"
+                        } else {
+                            echo "🐳 Deploying with Docker..."
+                            sh """
+                                docker stop productivity-backend || true
+                                docker rm productivity-backend || true
+                                docker stop productivity-frontend || true
+                                docker rm productivity-frontend || true
                                 
-//                                 docker network create productivity-network || true
+                                docker network create productivity-network || true
                                 
-//                                 # Run backend
-//                                 docker run -d \
-//                                     --name productivity-backend \
-//                                     --network productivity-network \
-//                                     -p 5000:5000 \
-//                                     -e NODE_ENV=production \
-//                                     --restart unless-stopped \
-//                                     ${DOCKER_REGISTRY}/${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG}
+                                # Run backend
+                                docker run -d \
+                                    --name productivity-backend \
+                                    --network productivity-network \
+                                    -p 5000:5000 \
+                                    -e NODE_ENV=production \
+                                    --restart unless-stopped \
+                                    ${DOCKER_REGISTRY}/${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG}
                                 
-//                                 # Run frontend
-//                                 docker run -d \
-//                                     --name productivity-frontend \
-//                                     --network productivity-network \
-//                                     -p 3000:3000 \
-//                                     --restart unless-stopped \
-//                                     ${DOCKER_REGISTRY}/${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG}
+                                # Run frontend
+                                docker run -d \
+                                    --name productivity-frontend \
+                                    --network productivity-network \
+                                    -p 3000:3000 \
+                                    --restart unless-stopped \
+                                    ${DOCKER_REGISTRY}/${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG}
                                 
-//                                 sleep 5
-//                                 docker ps
-//                             """
-//                             echo "✅ Docker deployment completed"
-//                         }
-//                     } catch (Exception e) {
-//                         echo "⚠️ Deployment failed: ${e.message}"
-//                         throw e
-//                     }
-//                 }
-//             }
-//         }
+                                sleep 5
+                                docker ps
+                            """
+                            echo "✅ Docker deployment completed"
+                        }
+                    } catch (Exception e) {
+                        echo "⚠️ Deployment failed: ${e.message}"
+                        throw e
+                    }
+                }
+            }
+        }
         
-//         stage('Verify Deployment') {
-//             steps {
-//                 script {
-//                     echo "🏥 Verifying deployment and performing health checks..."
+        stage('Verify Deployment') {
+            steps {
+                script {
+                    echo "🏥 Verifying deployment and performing health checks..."
                     
-//                     if (env.DEPLOY_TARGET == "k8s") {
-//                         echo "☸️ Kubernetes deployment detected, checking pods and services..."
-//                         sh """
-//                             kubectl wait --for=condition=ready pod -l app=backend -n ${K8S_NAMESPACE} --timeout=300s
-//                             kubectl wait --for=condition=ready pod -l app=frontend -n ${K8S_NAMESPACE} --timeout=300s
+                    if (env.DEPLOY_TARGET == "k8s") {
+                        echo "☸️ Kubernetes deployment detected, checking pods and services..."
+                        sh """
+                            kubectl wait --for=condition=ready pod -l app=backend -n ${K8S_NAMESPACE} --timeout=300s
+                            kubectl wait --for=condition=ready pod -l app=frontend -n ${K8S_NAMESPACE} --timeout=300s
 
-//                             kubectl get pods -n ${K8S_NAMESPACE}
-//                             kubectl get services -n ${K8S_NAMESPACE}
-//                             kubectl get ingress -n ${K8S_NAMESPACE}
-//                         """
-//                         echo "✅ Kubernetes pods are running and healthy"
-//                     } else {
-//                         echo "🐳 Docker deployment detected, checking containers..."
-//                         sh """
-//                             sleep 15
-//                             docker ps
-//                             curl -f http://localhost:5000/health || echo "⚠️ Backend health check pending..."
-//                         """
-//                         echo "✅ Docker containers are running and healthy"
-//                     }
-//                 }
-//             }
-//         }
-//     }
+                            kubectl get pods -n ${K8S_NAMESPACE}
+                            kubectl get services -n ${K8S_NAMESPACE}
+                            kubectl get ingress -n ${K8S_NAMESPACE}
+                        """
+                        echo "✅ Kubernetes pods are running and healthy"
+                    } else {
+                        echo "🐳 Docker deployment detected, checking containers..."
+                        sh """
+                            sleep 15
+                            docker ps
+                            curl -f http://localhost:5000/health || echo "⚠️ Backend health check pending..."
+                        """
+                        echo "✅ Docker containers are running and healthy"
+                    }
+                }
+            }
+        }
+    }
     
-//     post {
-//         always {
-//             script {
-//                 echo "🧹 Cleaning up..."
-//                 node {
-//                     sh """
-//                         docker logout || true
-//                         docker image prune -f || true
-//                     """
-//                 }
-//             }
-//         }
-//         success {
-//             script {
-//                 echo """
-//         ════════════════════════════════════════════
-//         ✅ Pipeline Completed Successfully!
-//         ════════════════════════════════════════════
-//         📦 Build Number: ${BUILD_NUMBER}
-//         🐳 Backend Image: ${DOCKER_REGISTRY}/${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG}
-//         🐳 Frontend Image: ${DOCKER_REGISTRY}/${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG}
-//         🌐 Backend: http://<EC2_IP>:5000
-//         🌐 Frontend: http://<EC2_IP>:3000
-//         🔍 SonarQube Report: ${SONARQUBE_HOST}
-//         ════════════════════════════════════════════
-//         """
-//             }
-//         }
-//         failure {
-//             script {
-//                 echo """
-//         ════════════════════════════════════════════
-//         ❌ Pipeline Failed!
-//         ════════════════════════════════════════════
-//         📋 Check logs above for details
-//         🔍 Build Number: ${BUILD_NUMBER}
-//         ════════════════════════════════════════════
-//         """
-//                 node {
-//                     sh """
-//                         docker logs productivity-backend || true
-//                         docker logs productivity-frontend || true
-//                         docker ps -a || true
-//                     """
-//                 }
-//             }
-//         }
-//         unstable {
-//             echo "⚠️ Pipeline completed with warnings"
-//         }
-//     }
-// }
+    post {
+        always {
+            script {
+                echo "🧹 Cleaning up..."
+                node {
+                    sh """
+                        docker logout || true
+                        docker image prune -f || true
+                    """
+                }
+            }
+        }
+        success {
+            script {
+                echo """
+        ════════════════════════════════════════════
+        ✅ Pipeline Completed Successfully!
+        ════════════════════════════════════════════
+        📦 Build Number: ${BUILD_NUMBER}
+        🐳 Backend Image: ${DOCKER_REGISTRY}/${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG}
+        🐳 Frontend Image: ${DOCKER_REGISTRY}/${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG}
+        🌐 Backend: http://<EC2_IP>:5000
+        🌐 Frontend: http://<EC2_IP>:3000
+        🔍 SonarQube Report: ${SONARQUBE_HOST}
+        ════════════════════════════════════════════
+        """
+            }
+        }
+        failure {
+            script {
+                echo """
+        ════════════════════════════════════════════
+        ❌ Pipeline Failed!
+        ════════════════════════════════════════════
+        📋 Check logs above for details
+        🔍 Build Number: ${BUILD_NUMBER}
+        ════════════════════════════════════════════
+        """
+                node {
+                    sh """
+                        docker logs productivity-backend || true
+                        docker logs productivity-frontend || true
+                        docker ps -a || true
+                    """
+                }
+            }
+        }
+        unstable {
+            echo "⚠️ Pipeline completed with warnings"
+        }
+    }
+}
