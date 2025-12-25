@@ -280,17 +280,32 @@ pipeline {
                                 echo '🐳 Building frontend Docker image...'
                                 sh '''
                                     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                                    echo "Frontend Docker Build"
+                                    echo "Frontend Docker Build (Multi-stage)"
                                     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                                    echo "Build includes: Dependencies → Builder → Production"
+                                    echo ""
                                     
                                     docker build \
-                                      --build-arg NODE_ENV=production \
+                                      --progress=plain \
+                                      --target=production \
                                       -t ${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG} \
                                       -t ${DOCKER_IMAGE_FRONTEND}:${DOCKER_LATEST} \
+                                      -t ${DOCKER_IMAGE_FRONTEND}:build-${BUILD_NUMBER} \
                                       .
                                     
+                                    echo ""
                                     echo "✅ Frontend image built successfully"
-                                    docker images | grep ${DOCKER_IMAGE_FRONTEND}
+                                    echo ""
+                                    echo "Image Details:"
+                                    docker images | grep ${DOCKER_IMAGE_FRONTEND} | head -5
+                                    
+                                    echo ""
+                                    echo "Image Layers:"
+                                    docker history ${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG} | head -10
+                                    
+                                    echo ""
+                                    echo "Image Size:"
+                                    docker images ${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG} --format "{{.Size}}"
                                 '''
                             }
                         }
@@ -511,8 +526,12 @@ pipeline {
                         docker run -d \
                             --name productivity-frontend \
                             --network productivity-network \
-                            -p ${FRONTEND_PORT}:3000 \
+                            -p ${FRONTEND_PORT}:80 \
                             -e NODE_ENV=production \
+                            --health-cmd='curl -f http://localhost/index.html || exit 1' \
+                            --health-interval=30s \
+                            --health-timeout=5s \
+                            --health-retries=3 \
                             --restart unless-stopped \
                             ${DOCKER_IMAGE_FRONTEND}:${DOCKER_TAG}
                         

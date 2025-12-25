@@ -1,38 +1,71 @@
-# ---------- Build stage ----------
-FROM node:18-alpine AS build
+# ============================================
+# FRONTEND BUILD & DEPLOYMENT DOCKERFILE
+# Multi-stage production-optimized build
+# ============================================
+
+# -------- Stage 1: Dependencies --------
+FROM node:18-alpine AS dependencies
 
 WORKDIR /app
 
 # Copy package files
-COPY package.json package-lock.json ./
+COPY package*.json ./
 
-# Install dependencies with force flag to handle any conflicts
-RUN npm ci --legacy-peer-deps --force --no-fund || npm install --legacy-peer-deps --force --no-fund
+# Install all dependencies
+RUN npm ci --legacy-peer-deps --no-fund || npm install --legacy-peer-deps --force --no-fund
 
-# Copy source
+
+# -------- Stage 2: Builder --------
+FROM node:18-alpine AS builder
+
+WORKDIR /app
+
+# Copy dependencies from stage 1
+COPY --from=dependencies /app/node_modules /app/node_modules
+
+# Copy source code
 COPY . .
 
-# Build React app
-RUN CI=false npm run build
+# Environment variables
+ENV NODE_ENV=production
+ENV CI=false
+
+# Build React application
+RUN npm run build
+
+# Verify build output
+RUN test -d /app/build || (echo "Build failed: /app/build not found" && exit 1)
 
 
-# ---------- Runtime stage ----------
+# -------- Stage 3: Production --------
 FROM nginx:alpine
 
-# Remove default nginx config
-RUN rm /etc/nginx/conf.d/default.conf
+LABEL maintainer="DevOps Team" \
+      description="Production-ready Employee Productivity Tracker Frontend"
 
-# Copy custom nginx config
+WORKDIR /usr/share/nginx/html
+
+# Install curl for health checks
+RUN apk add --no-cache curl
+
+# Remove default nginx config
+RUN rm -f /etc/nginx/conf.d/*.conf
+
+# Copy custom nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Copy build output
-COPY --from=build /app/build /usr/share/nginx/html
+# Copy optimized build artifacts
+COPY --from=builder /app/build .
+
+# Create nginx runtime directory
+RUN mkdir -p /var/run/nginx
 
 # Expose port
-EXPOSE 80
+EXPOSE 3000 80
 
-# Health check (HTML check – correct for frontend)
-HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
-  CMD wget -qO- http://localhost | grep -qi "<html" || exit 1
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost/index.html || exit 1
 
+# Start nginx
 CMD ["nginx", "-g", "daemon off;"]
