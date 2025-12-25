@@ -5,31 +5,6 @@ pipeline {
         nodejs 'node18'
     }
 
-    stages {
-
-        stage('Install Dependencies') {
-            parallel {
-                stage('Backend Dependencies') {
-                    steps {
-                        dir('backend') {
-                            sh 'node -v'
-                            sh 'npm -v'
-                            sh 'npm ci'
-                        }
-                    }
-                }
-                stage('Frontend Dependencies') {
-                    steps {
-                        dir('frontend') {
-                            sh 'node -v'
-                            sh 'npm -v'
-                            sh 'npm ci'
-                        }
-                    }
-                }
-            }
-        }
-    }
 
     environment {
         // Docker Configuration
@@ -61,49 +36,43 @@ pipeline {
         }
         
         stage('Install Dependencies') {
-            steps {
-                script {
-                    echo '📦 Installing dependencies...'
-                    parallel(
-                        'Backend Dependencies': {
-                            dir('backend') {
-                                sh 'npm ci'
-                            }
-                            echo '✅ Backend dependencies installed'
-                        },
-                        'Frontend Dependencies': {
-                            dir('frontend') {
-                                sh 'npm ci'
-                            }
-                            echo '✅ Frontend dependencies installed'
+            parallel {
+                stage('Backend Dependencies') {
+                    steps {
+                        dir('backend') {
+                            sh 'node -v'
+                            sh 'npm -v'
+                            sh 'npm ci'
                         }
-                    )
+                    }
+                }
+
+                stage('Frontend Dependencies') {
+                    steps {
+                        dir('frontend') {
+                            sh 'node -v'
+                            sh 'npm -v'
+                            sh 'npm ci'
+                        }
+                    }
                 }
             }
         }
-        
+
         stage('Run Tests') {
-            steps {
-                script {
-                    echo '🧪 Running tests...'
-                    try {
-                        parallel(
-                            'Backend Tests': {
-                                dir('backend') {
-                                    sh 'npm test || true'
-                                }
-                                echo '✅ Backend tests completed'
-                            },
-                            'Frontend Tests': {
-                                dir('frontend') {
-                                    sh 'npm test -- --watchAll=false || true'
-                                }
-                                echo '✅ Frontend tests completed'
-                            }
-                        )
-                    } catch (Exception e) {
-                        echo "⚠️ Some tests failed: ${e.message}"
-                        echo "ℹ️ Continuing pipeline..."
+            parallel {
+                stage('Backend Tests') {
+                    steps {
+                        dir('backend') {
+                            sh 'npm test || true'
+                        }
+                    }
+                }
+                stage('Frontend Tests') {
+                    steps {
+                        dir('frontend') {
+                            sh 'npm test -- --watchAll=false || true'
+                        }
                     }
                 }
             }
