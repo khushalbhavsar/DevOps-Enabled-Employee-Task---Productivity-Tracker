@@ -11,8 +11,8 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install all dependencies
-RUN npm ci --legacy-peer-deps --no-fund || npm install --legacy-peer-deps --force --no-fund
+# Install all dependencies with proper override support
+RUN npm install --legacy-peer-deps --no-fund
 
 
 # -------- Stage 2: Builder --------
