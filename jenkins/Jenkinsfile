@@ -315,9 +315,6 @@ pipeline {
         }
         
         stage('📤 Push to Docker Hub') {
-            when {
-                branch 'main'
-            }
             steps {
                 script {
                     echo '📤 Pushing Docker images to Docker Hub...'
@@ -355,9 +352,6 @@ pipeline {
         }
         
         stage('☸️  Deploy to Kubernetes') {
-            when {
-                branch 'main'
-            }
             steps {
                 script {
                     echo '☸️  Deploying to Kubernetes cluster...'
@@ -429,9 +423,6 @@ pipeline {
         }
         
         stage('☸️  Verify Kubernetes') {
-            when {
-                branch 'main'
-            }
             steps {
                 script {
                     echo '☸️  Verifying Kubernetes deployment...'
@@ -477,9 +468,6 @@ pipeline {
         }
         
         stage('🚀 Deploy Application') {
-            when {
-                branch 'main'
-            }
             steps {
                 script {
                     echo '🚀 Deploying application...'
@@ -545,9 +533,6 @@ pipeline {
         }
         
         stage('✅ Verify Deployment') {
-            when {
-                branch 'main'
-            }
             steps {
                 script {
                     echo '✅ Verifying deployment health...'
@@ -593,9 +578,6 @@ pipeline {
         }
         
         stage('🧪 Smoke Tests') {
-            when {
-                branch 'main'
-            }
             steps {
                 script {
                     echo '🧪 Running smoke tests...'
