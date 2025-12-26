@@ -355,68 +355,81 @@ pipeline {
             steps {
                 script {
                     echo '☸️  Deploying to Kubernetes cluster...'
-                    withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_FILE')]) {
-                        sh '''
-                            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                            echo "Kubernetes Deployment"
-                            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                            
-                            # Copy kubeconfig to workspace
-                            mkdir -p ~/.kube
-                            cp ${KUBECONFIG_FILE} ~/.kube/config
-                            chmod 600 ~/.kube/config
-                            
-                            # Verify kubectl connectivity
-                            echo "Verifying Kubernetes cluster connectivity..."
-                            kubectl cluster-info 2>/dev/null || echo "⚠️  Cluster info unavailable"
-                            
-                            # Create namespace if not exists
-                            echo "Creating namespace..."
-                            kubectl create namespace productivity-tracker 2>/dev/null || echo "Namespace already exists"
-                            
-                            # Update Docker image references in manifests
-                            echo "Updating Docker image references..."
-                            sed -i "s|IMAGE_TAG|${DOCKER_TAG}|g" kubernetes/deployments/*.yaml
-                            sed -i "s|DOCKER_REGISTRY|${DOCKER_REGISTRY}|g" kubernetes/deployments/*.yaml
-                            
-                            # Apply ConfigMaps
-                            echo "Applying ConfigMaps..."
-                            kubectl apply -f kubernetes/configmaps/ -n productivity-tracker
-                            
-                            # Apply MongoDB deployment (if not using external)
-                            echo "Deploying MongoDB..."
-                            kubectl apply -f kubernetes/deployments/mongodb-deployment.yaml -n productivity-tracker
-                            
-                            # Wait for MongoDB to be ready
-                            echo "Waiting for MongoDB to be ready..."
-                            kubectl rollout status deployment/mongodb -n productivity-tracker --timeout=300s 2>/dev/null || echo "MongoDB rollout status timeout"
-                            
-                            # Apply backend deployment
-                            echo "Deploying backend..."
-                            kubectl apply -f kubernetes/deployments/backend-deployment.yaml -n productivity-tracker
-                            
-                            # Apply frontend deployment
-                            echo "Deploying frontend..."
-                            kubectl apply -f kubernetes/deployments/frontend-deployment.yaml -n productivity-tracker
-                            
-                            # Apply services
-                            echo "Creating services..."
-                            kubectl apply -f kubernetes/services/ -n productivity-tracker
-                            
-                            # Apply ingress
-                            echo "Configuring ingress..."
-                            kubectl apply -f kubernetes/ingress/ -n productivity-tracker
-                            
-                            # Apply HPA (Horizontal Pod Autoscaler)
-                            echo "Setting up autoscaling..."
-                            kubectl apply -f kubernetes/hpa.yaml -n productivity-tracker
-                            
-                            echo "Waiting for deployments to be ready..."
-                            kubectl rollout status deployment/backend -n productivity-tracker --timeout=300s || echo "Backend deployment timeout"
-                            kubectl rollout status deployment/frontend -n productivity-tracker --timeout=300s || echo "Frontend deployment timeout"
-                            
-                            echo "✅ Kubernetes deployment completed"
-                        '''
+                    try {
+                        withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_FILE')]) {
+                            sh '''
+                                echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                                echo "Kubernetes Deployment"
+                                echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                                
+                                # Copy kubeconfig to workspace
+                                mkdir -p ~/.kube
+                                cp ${KUBECONFIG_FILE} ~/.kube/config
+                                chmod 600 ~/.kube/config
+                                
+                                # Verify kubectl connectivity
+                                echo "Verifying Kubernetes cluster connectivity..."
+                                kubectl cluster-info 2>/dev/null || echo "⚠️  Cluster info unavailable"
+                                
+                                # Create namespace if not exists
+                                echo "Creating namespace..."
+                                kubectl create namespace productivity-tracker 2>/dev/null || echo "Namespace already exists"
+                                
+                                # Update Docker image references in manifests
+                                echo "Updating Docker image references..."
+                                sed -i "s|IMAGE_TAG|${DOCKER_TAG}|g" kubernetes/deployments/*.yaml
+                                sed -i "s|DOCKER_REGISTRY|${DOCKER_REGISTRY}|g" kubernetes/deployments/*.yaml
+                                
+                                # Apply ConfigMaps
+                                echo "Applying ConfigMaps..."
+                                kubectl apply -f kubernetes/configmaps/ -n productivity-tracker
+                                
+                                # Apply MongoDB deployment (if not using external)
+                                echo "Deploying MongoDB..."
+                                kubectl apply -f kubernetes/deployments/mongodb-deployment.yaml -n productivity-tracker
+                                
+                                # Wait for MongoDB to be ready
+                                echo "Waiting for MongoDB to be ready..."
+                                kubectl rollout status deployment/mongodb -n productivity-tracker --timeout=300s 2>/dev/null || echo "MongoDB rollout status timeout"
+                                
+                                # Apply backend deployment
+                                echo "Deploying backend..."
+                                kubectl apply -f kubernetes/deployments/backend-deployment.yaml -n productivity-tracker
+                                
+                                # Apply frontend deployment
+                                echo "Deploying frontend..."
+                                kubectl apply -f kubernetes/deployments/frontend-deployment.yaml -n productivity-tracker
+                                
+                                # Apply services
+                                echo "Creating services..."
+                                kubectl apply -f kubernetes/services/ -n productivity-tracker
+                                
+                                # Apply ingress
+                                echo "Configuring ingress..."
+                                kubectl apply -f kubernetes/ingress/ -n productivity-tracker
+                                
+                                # Apply HPA (Horizontal Pod Autoscaler)
+                                echo "Setting up autoscaling..."
+                                kubectl apply -f kubernetes/hpa.yaml -n productivity-tracker
+                                
+                                echo "Waiting for deployments to be ready..."
+                                kubectl rollout status deployment/backend -n productivity-tracker --timeout=300s || echo "Backend deployment timeout"
+                                kubectl rollout status deployment/frontend -n productivity-tracker --timeout=300s || echo "Frontend deployment timeout"
+                                
+                                echo "✅ Kubernetes deployment completed"
+                            '''
+                        }
+                    } catch (Exception e) {
+                        echo "⚠️  Kubernetes credential (kubeconfig) not configured"
+                        echo "📋 To enable Kubernetes deployment:"
+                        echo "   1. Go to Jenkins → Manage Credentials"
+                        echo "   2. Select 'global' domain"
+                        echo "   3. Click 'Add Credentials'"
+                        echo "   4. Choose 'Secret file' type"
+                        echo "   5. Upload your kubeconfig file"
+                        echo "   6. Set ID to: kubeconfig"
+                        echo ""
+                        echo "ℹ️  Skipping Kubernetes deployment. Proceeding with Docker deployment instead."
                     }
                 }
             }
@@ -426,42 +439,46 @@ pipeline {
             steps {
                 script {
                     echo '☸️  Verifying Kubernetes deployment...'
-                    withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_FILE')]) {
-                        sh '''
-                            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                            echo "Kubernetes Verification"
-                            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                            
-                            cp ${KUBECONFIG_FILE} ~/.kube/config 2>/dev/null || true
-                            
-                            echo "Pod Status:"
-                            kubectl get pods -n productivity-tracker -o wide
-                            
-                            echo ""
-                            echo "Deployment Status:"
-                            kubectl get deployments -n productivity-tracker
-                            
-                            echo ""
-                            echo "Service Status:"
-                            kubectl get services -n productivity-tracker
-                            
-                            echo ""
-                            echo "Checking pod readiness..."
-                            for pod in $(kubectl get pods -n productivity-tracker -o name); do
-                                echo "Checking $pod..."
-                                kubectl wait --for=condition=ready pod/$pod -n productivity-tracker --timeout=60s 2>/dev/null || echo "Pod not ready: $pod"
-                            done
-                            
-                            echo ""
-                            echo "Ingress Status:"
-                            kubectl get ingress -n productivity-tracker
-                            
-                            echo ""
-                            echo "HPA Status:"
-                            kubectl get hpa -n productivity-tracker
-                            
-                            echo "✅ Verification completed"
-                        '''
+                    try {
+                        withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_FILE')]) {
+                            sh '''
+                                echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                                echo "Kubernetes Verification"
+                                echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                                
+                                cp ${KUBECONFIG_FILE} ~/.kube/config 2>/dev/null || true
+                                
+                                echo "Pod Status:"
+                                kubectl get pods -n productivity-tracker -o wide
+                                
+                                echo ""
+                                echo "Deployment Status:"
+                                kubectl get deployments -n productivity-tracker
+                                
+                                echo ""
+                                echo "Service Status:"
+                                kubectl get services -n productivity-tracker
+                                
+                                echo ""
+                                echo "Checking pod readiness..."
+                                for pod in $(kubectl get pods -n productivity-tracker -o name); do
+                                    echo "Checking $pod..."
+                                    kubectl wait --for=condition=ready pod/$pod -n productivity-tracker --timeout=60s 2>/dev/null || echo "Pod not ready: $pod"
+                                done
+                                
+                                echo ""
+                                echo "Ingress Status:"
+                                kubectl get ingress -n productivity-tracker
+                                
+                                echo ""
+                                echo "HPA Status:"
+                                kubectl get hpa -n productivity-tracker
+                                
+                                echo "✅ Verification completed"
+                            '''
+                        }
+                    } catch (Exception e) {
+                        echo "⚠️  Kubernetes credentials not available. Skipping verification."
                     }
                 }
             }
