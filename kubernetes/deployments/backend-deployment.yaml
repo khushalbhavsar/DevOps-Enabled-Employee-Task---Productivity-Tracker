@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: backend
-        image: yourdockerhub/productivity-backend:latest
+        image: khushalbhavsar/productivity-backend:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 5000

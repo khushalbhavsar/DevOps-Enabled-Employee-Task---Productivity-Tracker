@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: yourdockerhub/productivity-frontend:latest
+        image: khushalbhavsar/productivity-frontend:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 80
