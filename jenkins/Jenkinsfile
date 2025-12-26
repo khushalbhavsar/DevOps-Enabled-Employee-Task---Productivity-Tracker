@@ -500,7 +500,18 @@ pipeline {
                         # Stop and remove old containers
                         echo "Stopping old containers..."
                         docker stop productivity-backend productivity-frontend productivity-mongodb 2>/dev/null || true
-                        docker rm productivity-backend productivity-frontend productivity-mongodb 2>/dev/null || true
+                        sleep 2
+                        docker rm -f productivity-backend productivity-frontend productivity-mongodb 2>/dev/null || true
+                        
+                        # Force kill any lingering processes on our ports
+                        echo "Cleaning up port bindings..."
+                        for port in ${FRONTEND_PORT} ${BACKEND_PORT} ${MONGO_PORT}; do
+                            if lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1; then
+                                echo "Found process on port $port, killing..."
+                                kill -9 $(lsof -ti:$port) 2>/dev/null || true
+                                sleep 1
+                            fi
+                        done
                         
                         # Deploy MongoDB
                         echo "Starting MongoDB..."
@@ -514,6 +525,8 @@ pipeline {
                             --restart unless-stopped \
                             mongo:7.0
                         
+                        sleep 3
+                        
                         # Deploy Backend
                         echo "Starting backend service..."
                         docker run -d \
@@ -525,6 +538,8 @@ pipeline {
                             -e JWT_SECRET=$(openssl rand -hex 32 2>/dev/null || echo "default-secret-key") \
                             --restart unless-stopped \
                             ${DOCKER_IMAGE_BACKEND}:${DOCKER_TAG}
+                        
+                        sleep 2
                         
                         # Deploy Frontend
                         echo "Starting frontend service..."
